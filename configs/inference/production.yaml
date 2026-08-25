@@ -1,0 +1,49 @@
+schema_version: 1
+preset_name: production
+description: Validated HoloD3 model semantics with TensorRT FP16 backends.
+
+models:
+  yolo: models/production/detector.pt
+  depth_primary: models/production/depth-primary.pt
+  depth_fallback: models/production/depth-fallback.pt
+  diameter: models/production/diameter.pt
+
+detection:
+  image_size: 1024
+  confidence: 0.10
+  nms_iou: 0.15
+  max_detections: 600
+  batch_size: 8
+  image_load_workers: 4
+  contrast_input_max: 75
+
+reconstruction:
+  crop_size: 64
+  slice_start: 1
+  slice_end: 0
+  slice_step: 1
+  slice_block: 8
+  recenter_on_reconstructed_slice: false
+
+fallbacks:
+  minip_bbox: true
+  depth_router: true
+  depth_router_max_diameter_um: 75.0
+  diameter_underprediction: true
+  diameter_ratio_threshold: 0.35
+  diameter_min_bbox_side_um: 250.0
+
+runtime:
+  device: cuda:0
+  yolo_device: "0"
+  depth_model_backend: tensorrt
+  diameter_model_backend: tensorrt
+  depth_batch_size: 256
+  diameter_batch_size: 512
+  strict_backend: true
+  roi_image_prefetch_workers: 4
+  roi_image_prefetch_frames: 32
+  hologram_prefetch_workers: 4
+  hologram_prefetch_frames: 16
+  stream_csv_writes: true
+  keep_intermediate_csv: false

@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "provider": "huggingface",
+  "repo_id": "dnakaikit/HoloD3-datasets",
+  "repo_type": "dataset",
+  "revision": "8cee42b5290592e7cd36181edbe96d0a8bda57aa",
+  "private": true,
+  "bundles": [
+    {
+      "id": "detector-experimental",
+      "description": "Experimental MinIP images and YOLO labels for the detector base stage.",
+      "archive": "bundles/detector-experimental.tar.zst",
+      "bytes": 16358921,
+      "sha256": "5aec693f00802c5bbf32b07a1426848766d828cf1d3b7d622c45985b15a40bc1",
+      "scopes": ["training", "all"],
+      "required_paths": ["data.yaml", "manifest.csv", "train/images", "train/labels", "validation/images", "validation/labels"]
+    },
+    {
+      "id": "detector-mixed",
+      "description": "Experimental and synthetic MinIP images with the exact repeated training schedule.",
+      "archive": "bundles/detector-mixed.tar.zst",
+      "bytes": 72553563,
+      "sha256": "c1b669b7d9257ee0b596830af73ff4e8f2636358221fef2ae56ffd30ea0f672c",
+      "scopes": ["training", "all"],
+      "required_paths": ["data.yaml", "manifest.csv", "schedule.json", "train_images.txt", "validation_images.txt", "train/images", "train/labels"]
+    },
+    {
+      "id": "depth-primary",
+      "description": "Reconstructed depth crops and the primary focus-score manifest.",
+      "archive": "bundles/depth-primary.tar.zst",
+      "bytes": 292859323,
+      "sha256": "2e6442eb17d9e8f58959a41c016be0171a36535551a7becf627fe387bfd6c59d",
+      "scopes": ["training", "all"],
+      "required_paths": ["manifest.csv", "crops/train", "crops/valid"]
+    },
+    {
+      "id": "depth-fallback",
+      "description": "Reconstructed depth crops and the fallback focus-score manifest.",
+      "archive": "bundles/depth-fallback.tar.zst",
+      "bytes": 72914933,
+      "sha256": "2bfdeb5f2498056b309f7164da9ac3c62bf9248cb6285edb0f808211befd5d64",
+      "scopes": ["training", "all"],
+      "required_paths": ["manifest.csv", "crops/train", "crops/valid"]
+    },
+    {
+      "id": "diameter-combined",
+      "description": "Focused and dense reconstructed crops for the combined diameter model.",
+      "archive": "bundles/diameter-combined.tar.zst",
+      "bytes": 39173966,
+      "sha256": "84c074b7e45e224a50c619c1af3c83fda6321edac842b1e3eab3eb1b5fdee0f0",
+      "scopes": ["training", "all"],
+      "required_paths": ["crops.csv", "images"]
+    },
+    {
+      "id": "evaluation-benchmark",
+      "description": "Twelve held-out synthetic frames with synchronized holograms and particle truth.",
+      "archive": "bundles/evaluation-benchmark.tar.zst",
+      "bytes": 24187522,
+      "sha256": "727fc05f66fee0fc62e4633c2656ae72f506d699a2e9053010f44aedec4a15cc",
+      "scopes": ["evaluation", "all"],
+      "required_paths": ["acquisition.yaml", "holograms/primary", "holograms/secondary", "minip", "calibration/secondary_distortion_coefficients.txt", "truth/particles.csv", "truth/xy_rois.csv"]
+    }
+  ]
+}

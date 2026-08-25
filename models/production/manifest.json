@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "pipeline": "production",
+  "distribution": {
+    "provider": "huggingface",
+    "repo_id": "dnakaikit/HoloD3-models",
+    "repo_type": "model",
+    "revision": "520e56fca2e6b576bba600a3b64dcb6ce59d4747",
+    "private": true,
+    "manifest": "models/remote_manifest.json"
+  },
+  "artifacts": [
+    {
+      "id": "detector",
+      "role": "MinIP particle detector",
+      "path": "models/production/detector.pt",
+      "bytes": 210751682,
+      "sha256": "4072d26f7e0f71e6a46183db643126db216b4bff9c2e88c4e602571eb3df044f",
+      "framework": "Ultralytics YOLO26l",
+      "framework_version": "8.4.91",
+      "training_data": "detector-mixed",
+      "selection": "Epoch 19 of the 20-epoch fine-tuning stage"
+    },
+    {
+      "id": "depth-primary",
+      "role": "Primary depth focus scorer",
+      "path": "models/production/depth-primary.pt",
+      "bytes": 157685,
+      "sha256": "c69ea9c713f5d588ab5b1c43ef52702a449496b0c3d591b87f0349fa8f9e0d21",
+      "framework": "PyTorch FocusScoreNet",
+      "training_data": "depth-primary"
+    },
+    {
+      "id": "depth-fallback",
+      "role": "Fallback depth focus scorer for small particles",
+      "path": "models/production/depth-fallback.pt",
+      "bytes": 152373,
+      "sha256": "cfb3632c4c9e96a3e0da4d25f6ff23183f1e49869400ff6d39542fa1bdca3ea3",
+      "framework": "PyTorch FocusScoreNet",
+      "training_data": "depth-fallback"
+    },
+    {
+      "id": "diameter",
+      "role": "Diameter regressor at the selected reconstructed slice",
+      "path": "models/production/diameter.pt",
+      "bytes": 6750991,
+      "sha256": "50faaf673cd4e7fb2034d76c5e249c8a8b7eb7fcc98d8670039fc53c9f9a1f26",
+      "framework": "PyTorch SliceDiamModel",
+      "training_data": "diameter-combined",
+      "selection": "Epoch 52"
+    }
+  ],
+  "training_initializers": [
+    {
+      "id": "detector-architecture",
+      "role": "YOLO26l architecture initializer for the experimental base stage",
+      "path": "models/initializers/detector-architecture.pt",
+      "bytes": 53211173,
+      "sha256": "9fe3c544f2b19bebad7ea41e76d7ad3d88b7c2f10d11d24430c5311f6b32db26"
+    },
+    {
+      "id": "detector-baseline",
+      "role": "Selected input checkpoint for production detector fine-tuning",
+      "path": "models/initializers/detector-baseline.pt",
+      "bytes": 53354149,
+      "sha256": "590e385e4f8df9660eb1f6269719548538adc573af7d3218f7cfd53b6235819d"
+    }
+  ],
+  "training_inputs": [
+    {
+      "id": "detector-experimental",
+      "path": "data/downloaded/detector-experimental/data.yaml",
+      "sha256": "4a4778f95dedd9bd38143a7d63f4c0f52c2ebcdd6eca32d6bc6ba857d1cb4b7f"
+    },
+    {
+      "id": "detector-mixed",
+      "path": "data/downloaded/detector-mixed/data.yaml",
+      "sha256": "6a7474131076e87aa974e63fad6c24518137cee3a8940f8dd66f6ba43ea1850f"
+    },
+    {
+      "id": "depth-primary",
+      "path": "data/downloaded/depth-primary/manifest.csv",
+      "rows": 104172,
+      "samples": 5200,
+      "sha256": "1a84aeef39a0e36b02c12d5f46d2418a440c71b9075021eef26fd340a092b69e"
+    },
+    {
+      "id": "depth-fallback",
+      "path": "data/downloaded/depth-fallback/manifest.csv",
+      "rows": 30600,
+      "samples": 1600,
+      "sha256": "97f2fae28f11a4211bb5e99dd4042698c216f75d0b1da6f5520f61bb81f729fc"
+    },
+    {
+      "id": "diameter-combined",
+      "path": "data/downloaded/diameter-combined/crops.csv",
+      "rows": 14080,
+      "sha256": "04f9fcd556ff635919ad394dd5c5ffcd8660a1ebf53b1732e9768de3555704a5"
+    },
+    {
+      "id": "evaluation-benchmark",
+      "path": "data/downloaded/evaluation-benchmark/acquisition.yaml",
+      "sha256": "d330270252c0d55313571d56d96ce2484bb2aaf542a584491e565701c2a996c3"
+    }
+  ]
+}

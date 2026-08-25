@@ -1,0 +1,31 @@
+schema_version: 1
+name: my-single-gabor-acquisition
+description: Replace this text with a stable description of the acquisition.
+mode: single_gabor
+
+frames:
+  primary_holograms: holograms
+  # Omit the secondary directory in single-Gabor mode.
+  # Supply MinIP images, or set this to null to reconstruct them from each raw hologram.
+  minip: null
+
+optics:
+  wavelength_um: 0.6328
+  pixel_pitch_um: 10.0
+  image_size_px: 1024
+  reconstruction_start_um: 80200.0
+  slice_spacing_um: 100.0
+  slice_count: 1024
+  phase_retrieval_distance_um: null
+
+reconstruction:
+  phase_retrieval_iterations: 0
+  fft_padding_side: 1536
+  minip_slice_step: 2
+
+calibration:
+  secondary_distortion_coefficients: null
+
+transforms:
+  primary: []
+  minip: []

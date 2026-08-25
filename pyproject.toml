@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holod3"
+version = "0.1.0"
+description = "Reproducible 3D particle inference from raw hologram acquisitions"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flask>=3.0.3",
+    "huggingface-hub>=1.23.0",
+    "numpy>=2.4.4",
+    "opencv-python>=4.13.0.92",
+    "pandas>=3.0.3",
+    "pillow>=10.0.0",
+    "plotly>=6.8.0",
+    "pyyaml>=6.0.2",
+    "torch>=2.12.1",
+    "tqdm>=4.67.3",
+    "ultralytics>=8.4.91,<8.5",
+    "zstandard>=0.23.0",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "cuda-python>=13.3.1",
+    "nvmath-python>=0.3.0",
+    "torch-tensorrt>=2.12.1",
+]
+train = [
+    "matplotlib>=3.10.9",
+    "scipy>=1.16.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "ruff>=0.12.0",
+]
+
+[project.scripts]
+holod3 = "holod3.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["holod3*", "src*", "scripts*"]
+
+[tool.setuptools.package-data]
+holod3 = ["templates/*.html", "static/*.css", "static/*.js"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# The numerical training/inference core retains source-compatible import order
+# and loop-local closures; the public package and tests use the full rule set.
+"src/**/*.py" = ["B007", "B009", "B023", "B905", "E402", "F401", "I001", "UP017", "UP031", "UP035", "UP037"]
+"scripts/*.py" = ["B007", "B009", "B023", "B905", "E402", "F401", "I001", "UP017", "UP031", "UP035", "UP037"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: exercises packaged weights or the full hologram pipeline",
+    "slow: takes more than a few seconds or requires a GPU",
+]

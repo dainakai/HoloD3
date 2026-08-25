@@ -1,0 +1,31 @@
+schema_version: 1
+name: experimental-demo
+description: Six consecutive frames from a real dual-camera hologram acquisition.
+mode: dual_phase_retrieval
+
+frames:
+  primary_holograms: holograms/primary
+  secondary_holograms: holograms/secondary
+  minip: minip
+
+optics:
+  wavelength_um: 0.6328
+  pixel_pitch_um: 10.0
+  image_size_px: 1024
+  reconstruction_start_um: 80200.0
+  slice_spacing_um: 100.0
+  slice_count: 1024
+  phase_retrieval_distance_um: 33050.0
+
+reconstruction:
+  phase_retrieval_iterations: 3
+  fft_padding_side: 1536
+  minip_slice_step: 2
+
+calibration:
+  secondary_distortion_coefficients: calibration/secondary_distortion_coefficients.txt
+
+transforms:
+  primary: []
+  secondary: []
+  minip: []

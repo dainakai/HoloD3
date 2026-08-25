@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HoloD3 Workbench</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Hologram particle inference</p>
+      <h1>HoloD3 Workbench</h1>
+      <p>Try the packaged detector on a MinIP image, or run detection, depth, diameter, CSV export, and 3D visualization.</p>
+      <div class="badges"><span>{{ preset }}</span><span>local only</span><span>no tracking</span></div>
+    </header>
+
+    <section class="panel">
+      <div class="section-title"><span>01</span><div><h2>MinIP particle detection</h2><p>Upload an image or use a path already visible to this machine.</p></div></div>
+      <form id="detect-form">
+        <label>Image file<input id="image-file" name="image" type="file" accept="image/*"></label>
+        <label>Local image path<input id="image-path" name="image_path" value="{{ sample_image }}"></label>
+        <button type="submit">Run YOLO detection</button>
+      </form>
+      <p id="detect-status" class="status">Ready.</p>
+      <div id="detect-result" class="result hidden">
+        <img id="annotated-image" alt="Annotated particle detections">
+        <pre id="detection-json"></pre>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><span>02</span><div><h2>Full 3D pipeline</h2><p>Use one acquisition file for image paths, holography mode, optics, calibration, and optional transforms.</p></div></div>
+      <form id="pipeline-form">
+        <label>Acquisition YAML<input name="acquisition" value="{{ sample_acquisition }}" required></label>
+        <p class="hint">The included file selects the real experimental demo. Copy a template from <code>configs/acquisitions/</code> for your data.</p>
+        <label>Output directory <small>optional</small><input name="run_dir" placeholder="A timestamped runs/web directory"></label>
+        <label>Frame limit <small>0 runs every frame</small><input name="limit" type="number" min="0" value="1"></label>
+        <details>
+          <summary>Model checkpoint paths</summary>
+          <p class="hint">Use the packaged defaults, or enter trusted checkpoint paths visible to this machine. Never select a checkpoint from an untrusted source.</p>
+          <label>Detector<input name="yolo_weights" value="{{ models.yolo }}"></label>
+          <label>Primary depth scorer<input name="depth_primary_weights" value="{{ models.depth_primary }}"></label>
+          <label>Fallback depth scorer<input name="depth_fallback_weights" value="{{ models.depth_fallback }}"></label>
+          <label>Diameter regressor<input name="diameter_weights" value="{{ models.diameter }}"></label>
+        </details>
+        <fieldset>
+          <legend>Fallback controls</legend>
+          <label class="check"><input name="bbox_fallback" type="checkbox" {% if fallback.minip_bbox %}checked{% endif %}> Keep bbox measurements when MinIP contrast-area extraction fails</label>
+          <label class="check"><input name="depth_router" type="checkbox" {% if fallback.depth_router %}checked{% endif %}> Route small fallback measurements to the baseline DepthModel</label>
+          <label class="check"><input name="diameter_fallback" type="checkbox" {% if fallback.diameter_underprediction %}checked{% endif %}> Repair severe large-particle SliceDiam underprediction</label>
+        </fieldset>
+        <button type="submit">Start full pipeline</button>
+      </form>
+      <p id="pipeline-status" class="status">Ready.</p>
+      <pre id="pipeline-result" class="hidden"></pre>
+      <div id="pipeline-links" class="result hidden"></div>
+    </section>
+
+    <footer>HoloD3 binds to 127.0.0.1 by default. This trusted-local UI has no authentication, can read server paths, and can start GPU work; do not expose it to a network.</footer>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

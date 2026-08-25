@@ -1,0 +1,35 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ultralytics/
+.mplconfig/
+.cache/huggingface/
+.uv-cache/
+*.egg-info/
+
+# Model checkpoints are distributed from the private Hugging Face repository.
+# Run `uv run holod3 fetch-models --scope production` after cloning.
+*.pt
+
+# Generated runs and Web UI uploads
+runs/*
+!runs/.gitkeep
+
+# Downloaded dataset bundles, archives, and atomic-extraction staging
+data/downloaded/
+data/.downloads/
+data/.staging/
+
+# Durable agent session memory belongs beside the repository, not inside it.
+session/
+
+# Local scratch
+tmp/
+
+# TensorRT compilation caches and exported engines
+*.engine
+*.plan
+*.ts

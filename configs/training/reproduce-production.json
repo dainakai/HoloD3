@@ -1,0 +1,302 @@
+{
+  "schema_version": 1,
+  "description": "Complete production training lineage using downloaded, checksum-verified dataset bundles. Every output is new and stays below runs/reproduction/production.",
+  "run_root": "runs/reproduction/production",
+  "stages": {
+    "check": [
+      {
+        "name": "verify-production-and-training-assets",
+        "script": "scripts/verify_assets.py",
+        "args": ["--full"],
+        "inputs": [
+          "models/production/manifest.json",
+          "models/production/detector.pt",
+          "models/production/depth-primary.pt",
+          "models/production/depth-fallback.pt",
+          "models/production/diameter.pt",
+          "models/initializers/detector-architecture.pt",
+          "models/initializers/detector-baseline.pt",
+          "data/downloaded/detector-experimental/data.yaml",
+          "data/downloaded/detector-mixed/data.yaml",
+          "data/downloaded/depth-primary/manifest.csv",
+          "data/downloaded/depth-fallback/manifest.csv",
+          "data/downloaded/diameter-combined/crops.csv",
+          "data/downloaded/evaluation-benchmark/acquisition.yaml"
+        ],
+        "outputs": []
+      }
+    ],
+    "yolo-baseline": [
+      {
+        "name": "train-original-experimental-yolo-baseline",
+        "script": "src/yolo/train_legacy.py",
+        "args": [
+          "--data", "data/downloaded/detector-experimental/data.yaml",
+          "--weights", "models/initializers/detector-architecture.pt",
+          "--project", "runs/reproduction/production/train",
+          "--name", "detector_experimental_base",
+          "--epochs", "2000",
+          "--patience", "300",
+          "--batch", "2",
+          "--imgsz", "1280",
+          "--multi-scale", "0.2",
+          "--scale", "0.5",
+          "--max-det", "400",
+          "--workers", "8",
+          "--optimizer", "auto",
+          "--lr0", "0.01",
+          "--lrf", "0.01",
+          "--seed", "0",
+          "--device", "0",
+          "--amp"
+        ],
+        "inputs": [
+          "data/downloaded/detector-experimental/data.yaml",
+          "models/initializers/detector-architecture.pt"
+        ],
+        "outputs": ["runs/reproduction/production/train/detector_experimental_base"]
+      }
+    ],
+    "yolo-production": [
+      {
+        "name": "fine-tune-production-yolo",
+        "script": "src/yolo/train_legacy.py",
+        "args": [
+          "--data", "data/downloaded/detector-mixed/data.yaml",
+          "--weights", "models/initializers/detector-baseline.pt",
+          "--project", "runs/reproduction/production/train",
+          "--name", "detector_final",
+          "--epochs", "20",
+          "--patience", "20",
+          "--batch", "2",
+          "--imgsz", "1280",
+          "--multi-scale", "0.2",
+          "--scale", "0.5",
+          "--max-det", "600",
+          "--workers", "8",
+          "--optimizer", "AdamW",
+          "--lr0", "0.00002",
+          "--lrf", "0.1",
+          "--warmup-epochs", "0.0",
+          "--warmup-bias-lr", "0.0",
+          "--save-period", "1",
+          "--freeze-bn-stats",
+          "--seed", "0",
+          "--device", "1",
+          "--amp"
+        ],
+        "inputs": [
+          "data/downloaded/detector-mixed/data.yaml",
+          "models/initializers/detector-baseline.pt"
+        ],
+        "outputs": ["runs/reproduction/production/train/detector_final"]
+      },
+      {
+        "name": "select-yolo-epoch-19",
+        "script": "scripts/select_checkpoint.py",
+        "args": [
+          "--source", "runs/reproduction/production/train/detector_final/weights/epoch19.pt",
+          "--output", "runs/reproduction/production/train/detector_final/selected/detector.pt",
+          "--reason", "The validated production artifact selected epoch 19 after the 20-epoch fine-tuning run."
+        ],
+        "inputs": ["runs/reproduction/production/train/detector_final/weights/epoch19.pt"],
+        "outputs": ["runs/reproduction/production/train/detector_final/selected"]
+      }
+    ],
+    "depth-fallback": [
+      {
+        "name": "train-baseline-depth-fallback",
+        "script": "src/depth/train_depth_fallback.py",
+        "args": [
+          "--manifest", "data/downloaded/depth-fallback/manifest.csv",
+          "--out-dir", "runs/reproduction/production/train/depth_fallback",
+          "--device", "cuda:0",
+          "--seed", "260617",
+          "--epochs", "8",
+          "--batch-size", "256",
+          "--pairs-per-epoch", "8000",
+          "--valid-pairs", "3000",
+          "--lr", "0.002",
+          "--weight-decay", "0.0001",
+          "--width", "16",
+          "--arch", "default",
+          "--input-mode", "raw_diam_scalar",
+          "--outer-swap-prob", "0.0",
+          "--neighbor-mix-prob", "0.0",
+          "--near-far-prob", "0.0",
+          "--min-delta-um", "50",
+          "--pair-temperature", "0.35",
+          "--score-reg-weight", "0.15",
+          "--focus-scale-um", "1200",
+          "--num-workers", "0",
+          "--cache-images"
+        ],
+        "inputs": ["data/downloaded/depth-fallback/manifest.csv"],
+        "outputs": ["runs/reproduction/production/train/depth_fallback"]
+      }
+    ],
+    "depth-primary": [
+      {
+        "name": "train-robust-primary-depth-model",
+        "script": "src/depth/train_depth_compare.py",
+        "args": [
+          "--manifest", "data/downloaded/depth-primary/manifest.csv",
+          "--out-dir", "runs/reproduction/production/train/depth_primary",
+          "--device", "cuda:0",
+          "--split-policy", "frame-hash",
+          "--eval-split-policy", "strict",
+          "--valid-frame-fraction", "0.25",
+          "--seed", "26071101",
+          "--deterministic",
+          "--epochs", "8",
+          "--batch-size", "256",
+          "--pairs-per-epoch", "30000",
+          "--valid-pairs", "5000",
+          "--lr", "0.002",
+          "--weight-decay", "0.0001",
+          "--width", "16",
+          "--arch", "default",
+          "--input-mode", "raw_diam_scalar",
+          "--pixel-augment",
+          "--center-shift-prob", "0.8",
+          "--center-shift-max-px", "2",
+          "--outer-swap-prob", "0.4",
+          "--outer-swap-radius-diam-scale", "2.5",
+          "--neighbor-mix-prob", "0.25",
+          "--diameter-scalar-perturb-log-std", "0.22",
+          "--diameter-scalar-dropout", "0.25",
+          "--diameter-scalar-overestimate-prob", "0.45",
+          "--diameter-scalar-overestimate-max-factor", "2.2",
+          "--diameter-sampling", "bin-balanced",
+          "--near-far-prob", "0.5",
+          "--min-delta-um", "50",
+          "--pair-temperature", "0.35",
+          "--score-reg-weight", "0.15",
+          "--focus-scale-um", "1200",
+          "--selection-worst-bin-weight", "0.5",
+          "--selection-catastrophic-penalty-um", "5000",
+          "--selection-pair-error-penalty-um", "500",
+          "--num-workers", "0",
+          "--save-eval-predictions"
+        ],
+        "inputs": ["data/downloaded/depth-primary/manifest.csv"],
+        "outputs": ["runs/reproduction/production/train/depth_primary"]
+      }
+    ],
+    "diameter": [
+      {
+        "name": "train-combined-diameter-model",
+        "script": "src/diam/train_slice_diammodel.py",
+        "args": [
+          "--crops-csv", "data/downloaded/diameter-combined/crops.csv",
+          "--data-root", "data/downloaded/diameter-combined",
+          "--out-dir", "runs/reproduction/production/train/diameter",
+          "--device", "cuda:0",
+          "--epochs", "70",
+          "--patience", "16",
+          "--batch-size", "512",
+          "--num-workers", "2",
+          "--lr", "0.0018",
+          "--weight-decay", "0.0001",
+          "--seed", "260624",
+          "--best-overall-weight", "0.50",
+          "--best-large-weight", "0.30",
+          "--best-very-large-weight", "0.20",
+          "--deterministic",
+          "--center-shift-px", "4",
+          "--geometric-augmentation",
+          "--photometric-augmentation",
+          "--z-quality-proxy-prob", "0.0"
+        ],
+        "inputs": [
+          "data/downloaded/diameter-combined/crops.csv",
+          "data/downloaded/diameter-combined/images"
+        ],
+        "outputs": ["runs/reproduction/production/train/diameter"]
+      }
+    ],
+    "evaluate": [
+      {
+        "name": "evaluate-reproduced-yolo-on-experimental-validation",
+        "script": "src/evaluation/evaluate_yolo_real.py",
+        "args": [
+          "--data", "data/downloaded/detector-mixed/data.yaml",
+          "--out-dir", "runs/reproduction/production/evaluation/detector",
+          "--model", "reproduced=runs/reproduction/production/train/detector_final/selected/detector.pt",
+          "--model", "packaged=models/production/detector.pt",
+          "--imgsz", "1024",
+          "--batch", "2",
+          "--device", "0",
+          "--workers", "4",
+          "--conf", "0.001",
+          "--iou", "0.70",
+          "--max-det", "1000",
+          "--half"
+        ],
+        "inputs": [
+          "data/downloaded/detector-mixed/data.yaml",
+          "runs/reproduction/production/train/detector_final/selected/detector.pt",
+          "models/production/detector.pt"
+        ],
+        "outputs": ["runs/reproduction/production/evaluation/detector"]
+      },
+      {
+        "name": "evaluate-reproduced-diameter-on-test-crops",
+        "script": "src/evaluation/evaluate_diam_checkpoint.py",
+        "args": [
+          "--crops-csv", "data/downloaded/diameter-combined/crops.csv",
+          "--data-root", "data/downloaded/diameter-combined",
+          "--weights", "runs/reproduction/production/train/diameter/slice_diammodel_best.pt",
+          "--out-dir", "runs/reproduction/production/evaluation/diameter",
+          "--split", "test",
+          "--device", "cuda:0",
+          "--batch-size", "512"
+        ],
+        "inputs": [
+          "data/downloaded/diameter-combined/crops.csv",
+          "runs/reproduction/production/train/diameter/slice_diammodel_best.pt"
+        ],
+        "outputs": ["runs/reproduction/production/evaluation/diameter"]
+      },
+      {
+        "name": "run-reproduced-end-to-end-holdout",
+        "script": "scripts/run_reproduced_pipeline.py",
+        "args": [
+          "--acquisition", "data/downloaded/evaluation-benchmark/acquisition.yaml",
+          "--run-dir", "runs/reproduction/production/evaluation/pipeline",
+          "--yolo", "runs/reproduction/production/train/detector_final/selected/detector.pt",
+          "--depth-primary", "runs/reproduction/production/train/depth_primary/depth_compare_best.pt",
+          "--depth-fallback", "runs/reproduction/production/train/depth_fallback/depth_compare_best.pt",
+          "--diameter", "runs/reproduction/production/train/diameter/slice_diammodel_best.pt",
+          "--device", "cuda:0",
+          "--yolo-device", "0",
+          "--limit", "0"
+        ],
+        "inputs": [
+          "data/downloaded/evaluation-benchmark/acquisition.yaml",
+          "runs/reproduction/production/train/detector_final/selected/detector.pt",
+          "runs/reproduction/production/train/depth_primary/depth_compare_best.pt",
+          "runs/reproduction/production/train/depth_fallback/depth_compare_best.pt",
+          "runs/reproduction/production/train/diameter/slice_diammodel_best.pt"
+        ],
+        "outputs": ["runs/reproduction/production/evaluation/pipeline"]
+      },
+      {
+        "name": "score-reproduced-end-to-end-holdout",
+        "script": "src/evaluation/evaluate_pipeline.py",
+        "args": [
+          "--dataset", "data/downloaded/evaluation-benchmark",
+          "--pipeline-csv", "runs/reproduction/production/evaluation/pipeline/particles_3d.csv",
+          "--out-dir", "runs/reproduction/production/evaluation/pipeline_metrics",
+          "--center-gate-px", "8",
+          "--dz-um", "100"
+        ],
+        "inputs": [
+          "data/downloaded/evaluation-benchmark",
+          "runs/reproduction/production/evaluation/pipeline/particles_3d.csv"
+        ],
+        "outputs": ["runs/reproduction/production/evaluation/pipeline_metrics"]
+      }
+    ]
+  }
+}

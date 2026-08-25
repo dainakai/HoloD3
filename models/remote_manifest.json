@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "provider": "huggingface",
+  "repo_id": "dnakaikit/HoloD3-models",
+  "repo_type": "model",
+  "revision": "520e56fca2e6b576bba600a3b64dcb6ce59d4747",
+  "private": true,
+  "artifacts": [
+    {
+      "path": "models/production/detector.pt",
+      "bytes": 210751682,
+      "sha256": "4072d26f7e0f71e6a46183db643126db216b4bff9c2e88c4e602571eb3df044f",
+      "scopes": ["production", "reproduction", "all"]
+    },
+    {
+      "path": "models/production/depth-primary.pt",
+      "bytes": 157685,
+      "sha256": "c69ea9c713f5d588ab5b1c43ef52702a449496b0c3d591b87f0349fa8f9e0d21",
+      "scopes": ["production", "reproduction", "all"]
+    },
+    {
+      "path": "models/production/depth-fallback.pt",
+      "bytes": 152373,
+      "sha256": "cfb3632c4c9e96a3e0da4d25f6ff23183f1e49869400ff6d39542fa1bdca3ea3",
+      "scopes": ["production", "reproduction", "all"]
+    },
+    {
+      "path": "models/production/diameter.pt",
+      "bytes": 6750991,
+      "sha256": "50faaf673cd4e7fb2034d76c5e249c8a8b7eb7fcc98d8670039fc53c9f9a1f26",
+      "scopes": ["production", "reproduction", "all"]
+    },
+    {
+      "path": "models/initializers/detector-architecture.pt",
+      "bytes": 53211173,
+      "sha256": "9fe3c544f2b19bebad7ea41e76d7ad3d88b7c2f10d11d24430c5311f6b32db26",
+      "scopes": ["reproduction", "all"]
+    },
+    {
+      "path": "models/initializers/detector-baseline.pt",
+      "bytes": 53354149,
+      "sha256": "590e385e4f8df9660eb1f6269719548538adc573af7d3218f7cfd53b6235819d",
+      "scopes": ["reproduction", "all"]
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # HoloD3
 
+[![DOI](https://zenodo.org/badge/1339464549.svg)](https://doi.org/10.5281/zenodo.22125418)
+
 HoloD3 detects particles in hologram minimum-intensity projections (MinIP), estimates each particle's depth, and estimates its diameter. It supports:
 
 - validated dual-camera phase-retrieval inference;

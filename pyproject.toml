@@ -4,9 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "holod3"
-version = "0.1.0"
+version = "0.1.1"
 description = "Reproducible 3D particle inference from raw hologram acquisitions"
 readme = "README.md"
+authors = [{ name = "Dai Nakai" }]
+license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "flask>=3.0.3",

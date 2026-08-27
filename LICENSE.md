@@ -1,13 +1,32 @@
-# Licensing status
+# HoloD3 software license
 
-No public license has been selected for the project-specific source code, model
-weights, or research data in this repository. Possession of a copy does not by
-itself grant redistribution rights. Obtain permission from the repository owner
-before publishing or redistributing those assets.
+The HoloD3 project-specific source code and documentation are licensed under
+the MIT License below.
 
-Third-party packages retain their own licenses. In particular, the packaged
-YOLO checkpoint was produced with Ultralytics software and records the
-AGPL-3.0 license in its checkpoint metadata. Review the current Ultralytics
-license terms before deploying or redistributing an application that uses it.
+This license does not grant rights in third-party software or model weights,
+which remain subject to their applicable upstream terms. Research data,
+including files under `data/demo/experimental`, are not covered by the MIT
+License unless a file or directory states otherwise. See
+`THIRD_PARTY_NOTICES.md` for details.
 
-See `THIRD_PARTY_NOTICES.md` for dependency and asset notes.
+## MIT License
+
+Copyright (c) 2026 Dai Nakai
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

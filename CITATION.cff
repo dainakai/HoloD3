@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use HoloD3 in your research, please cite the software using the metadata below."
+type: software
+title: "HoloD3"
+version: 0.1.1
+date-released: 2026-08-27
+doi: 10.5281/zenodo.22125419
+authors:
+  - given-names: "Dai"
+    family-names: "Nakai"
+    orcid: "https://orcid.org/0000-0002-6819-2825"
+abstract: >-
+  HoloD3 provides reproducible three-dimensional particle inference from raw
+  hologram acquisitions, including particle detection, depth estimation, and
+  diameter estimation.
+keywords:
+  - holography
+  - particle detection
+  - three-dimensional inference
+  - computer vision
+license: MIT
+repository-code: "https://github.com/dainakai/HoloD3"

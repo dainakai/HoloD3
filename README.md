@@ -167,4 +167,4 @@ Run individual stages after reviewing GPU device values and storage requirements
 
 ## Access and licensing
 
-The Git repository, model repository, and dataset repository are private. A Hugging Face read token grants access only to approved accounts and is not redistribution permission. Never commit tokens. Review [LICENSE.md](LICENSE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistribution.
+The HoloD3 project-specific source code and documentation are available under the MIT License. The Git-tracked experimental demo, separately downloaded model checkpoints, and private training/evaluation datasets are not covered by that license. A Hugging Face read token grants access only to approved accounts and is not redistribution permission. Never commit tokens. Review [LICENSE.md](LICENSE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistribution.

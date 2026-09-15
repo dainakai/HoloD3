@@ -22,6 +22,7 @@ if str(REPO_ROOT_FOR_IMPORT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT_FOR_IMPORT))
 
 from holod3.acquisition import AcquisitionConfig  # noqa: E402
+from holod3.background import prepare_background_holograms  # noqa: E402
 from holod3.reconstruction import prepare_minip_images  # noqa: E402
 from src.pipeline.runtime import (  # noqa: E402
     DETECTION_DIR,
@@ -209,10 +210,26 @@ def main() -> None:
     steps: list[dict[str, object]] = []
     started = time.perf_counter()
 
-    prepare_started = time.perf_counter()
-    minip_summary = prepare_minip_images(
+    inference_acquisition, prepared_records, background_summary = prepare_background_holograms(
         acquisition,
         selected_records,
+        run_dir / "_inputs" / "background",
+        device=str(args.device),
+        overwrite=args.overwrite,
+    )
+    if background_summary["enabled"]:
+        steps.append(
+            {
+                "step": "remove_hologram_background",
+                "elapsed_sec": background_summary["elapsed_sec"],
+                "summary": background_summary,
+            }
+        )
+
+    prepare_started = time.perf_counter()
+    minip_summary = prepare_minip_images(
+        inference_acquisition,
+        prepared_records,
         image_dir,
         device=str(args.device),
         overwrite=args.overwrite,
@@ -318,6 +335,7 @@ def main() -> None:
             "acquisition_config": portable_path(acquisition_path, acquisition_dir=acquisition.base_dir),
             "acquisition_config_sha256": artifact_fingerprint(acquisition_path)["sha256"],
             "prepared_minip_dir": portable_path(image_dir, run_dir=run_dir),
+            "background_removal": background_summary,
             "run_dir": "run:.",
             "raw_detections_csv": portable_path(raw_csv, run_dir=run_dir),
             "measured_roi_csv": portable_path(measured_csv, run_dir=run_dir),
@@ -342,7 +360,7 @@ def main() -> None:
         "--run-dir",
         str(run_dir),
         "--acquisition-config",
-        str(acquisition_path),
+        str(inference_acquisition.source_path),
         "--input",
         str(measured_csv),
         "--depth-output",
@@ -459,6 +477,7 @@ def main() -> None:
         "prepared_minip_dir": portable_path(image_dir, run_dir=run_dir),
         "run_dir": "run:.",
         "selected_frames": len(selected_records),
+        "background_removal": background_summary,
         "device": str(args.device),
         "optics": {
             "wavelength_um": float(acquisition.optics.wavelength_um),

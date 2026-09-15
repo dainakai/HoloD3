@@ -7,6 +7,7 @@ HoloD3/
 ├── holod3/                    # Supported Python package, CLI, Web UI, and public API
 │   ├── acquisition.py        # Portable acquisition schema and input validation
 │   ├── artifacts.py          # Model manifest download and SHA-256 verification
+│   ├── background.py         # Shared temporal background preparation for inference
 │   ├── checkpoints.py        # Restricted state-dictionary checkpoint loader
 │   ├── config.py             # Typed inference/model/fallback/runtime policy
 │   ├── datasets.py           # Safe dataset-bundle download and atomic installation
@@ -39,6 +40,7 @@ HoloD3/
 │   ├── diam/                 # Canonical diameter model, training, and inference helpers
 │   ├── evaluation/           # Detector, diameter, and end-to-end scoring
 │   ├── pipeline/             # Fused executable orchestrator and runtime helpers
+│   ├── preprocessing/        # Temporal background correction and CUDA median kernels
 │   └── yolo/                 # Detector dataset and exact legacy-compatible trainer
 ├── scripts/
 │   ├── run_reproduction.py   # Safe staged command-ledger runner
@@ -77,7 +79,9 @@ run-directory/
 ├── frame_stats.csv
 ├── fused_depth_slice_metrics.json
 ├── hybrid_diameter_metrics.json
-└── _inputs/minip/
+└── _inputs/
+    ├── minip/
+    └── background/            # Optional corrected holograms, anchors, and acquisition
 ```
 
 Intermediate depth/diameter CSVs are deleted after fusion by default. Set `runtime.keep_intermediate_csv: true` in a copied inference configuration only when they are needed for debugging.

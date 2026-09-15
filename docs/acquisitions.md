@@ -93,6 +93,66 @@ y_um = y_px * pixel_pitch_um
 
 The calibration is applied after the secondary image transforms and before phase retrieval.
 
+## Temporal background removal
+
+Set `background_removal.enabled: true` for raw 8-bit image sequences. Omitted settings default to disabled, so existing acquisitions retain their preprocessing. The setting applies independently to each camera, and supports both dual-camera and single-Gabor sequences. At least two synchronized source frames are required; leave it disabled for an isolated hologram.
+
+```yaml
+background_removal:
+  enabled: true
+  window: 129
+  anchor_stride: 32
+  batch_size: 16
+  median_backend: auto
+  lowpass: 0
+  target_level: null
+  save_workers: 4
+```
+
+Set `frames.minip: null` when enabling background removal. Supplied MinIP images are rejected in this mode so detection and learned reconstruction use the same corrected input.
+
+The processing order is:
+
+1. Read each camera's raw grayscale images in sensor coordinates.
+2. Estimate per-pixel temporal median backgrounds at the first frame, every `anchor_stride` frames, and the last frame. Each centred window is clipped at the sequence boundaries; even-length boundary windows use the lower middle value.
+3. Save background anchors as float16 arrays and linearly interpolate the background for each selected frame.
+4. Subtract the background, remove the residual global median, then remove centred row and column median profiles smoothed with a Gaussian of sigma 3 pixels.
+5. Optionally subtract a spatial low-pass residual, add the target level, round, and clip to 8-bit PNG.
+6. Apply configured image transforms, then secondary-camera distortion calibration, and reconstruct the wavefront.
+
+The background estimator and interpolation operate in two passes, keeping one temporal window, two anchors, and one correction batch in memory. Source frames are naturally sorted and synchronized by stem. Background estimation always uses the complete acquisition; `--start-index`, `--end-index`, and `--limit` select which corrected frames are saved and passed to inference. This makes a selected frame's correction consistent with a full run. Background estimation still reads the source sequence when inference selects only one frame.
+
+| Setting | Meaning |
+| --- | --- |
+| `enabled` | Boolean; default `false`. |
+| `window` | Positive odd temporal window length; default `129`. |
+| `anchor_stride` | Positive number of frames between background anchors; default `32`. |
+| `batch_size` | Positive correction-pass batch size; default `16`. |
+| `median_backend` | `auto`, `torch`, `cuda-window`, or `cuda-rolling`. |
+| `lowpass` | Optional spatial mean-filter width; `0` disables it. Values above `1` are rounded up to an odd width. The padding must be smaller than both input dimensions. |
+| `target_level` | Target intensity in `[0, 255]`. `null` uses the median of the per-anchor spatial means, separately for each camera. |
+| `save_workers` | PNG writer threads; default `4`. `0` and `1` write synchronously. |
+
+`auto` uses the rolling CUDA histogram median for windows up to 255 frames when CUDA and the optional `cuda-python` bindings are available. Larger windows use the CUDA window median. Without the bindings it uses Torch on the selected device; CPU uses Torch as well. Explicit CUDA backends require CUDA. The temporal median is exact in every backend. For narrow test images the profile-smoothing radius is reduced to fit the image; normal images use radius 9.
+
+Background removal preserves arbitrary image stems and requires 8-bit source images; it rejects higher-bit-depth inputs instead of silently truncating them. Image transforms run after background removal. Convert other camera encodings to 8-bit before enabling this step.
+
+Corrected inputs and provenance are retained inside the run:
+
+```text
+_inputs/background/
+├── acquisition.yaml           # points to corrected images; correction disabled to avoid a second pass
+├── background_summary.json    # settings, frame counts, anchor positions, target levels, timing
+├── primary/
+│   ├── frame-name.png
+│   └── _anchors/*.npy
+└── secondary/                 # dual-camera only
+    ├── frame-name.png
+    └── _anchors/*.npy
+```
+
+The generated acquisition preserves the original optics, transforms, and calibration references. Both MinIP generation and the depth/diameter subprocess use it. `pipeline_summary.json` retains the original acquisition hash and adds the background settings, selected backend, and camera-specific timings. Existing prepared images require `--overwrite`; replacement clears obsolete selected frames after both cameras succeed.
+
 ## Image transforms
 
 Every image is loaded as two-dimensional grayscale `float32` in `[0, 1]`. Transform steps execute in listed order. Built-ins are:
@@ -152,4 +212,4 @@ The packaged learned checkpoints are not Gabor-domain calibrated. Supply domain-
 uv run holod3 validate-acquisition my-acquisition/acquisition.yaml
 ```
 
-Validation checks schema keys, finite units, required mode fields, input directories, image-stem synchronization, all 12 calibration values, and frame count. It also executes the configured transforms for every supplied input and verifies the final image shape. It does not reconstruct holograms, run a model, or write output. Custom transform code is therefore trusted local code and runs during validation as well as inference.
+Validation checks schema keys, finite units, required mode fields, input directories, image-stem synchronization, all 12 calibration values, and frame count. With background removal enabled, it also checks the settings, 8-bit source format, consistent sensor dimensions, and low-pass size. It executes the configured transforms for every supplied input and verifies the final image shape. It does not estimate backgrounds, reconstruct holograms, run a model, or write output. Custom transform code is therefore trusted local code and runs during validation as well as inference.

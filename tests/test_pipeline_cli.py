@@ -9,9 +9,11 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from holod3.acquisition import AcquisitionConfig
 from holod3.cli import main
 from holod3.config import PipelineConfig
 from holod3.pipeline import HoloD3Pipeline
+from src.pipeline import run_pipeline_fused
 from src.pipeline.run_pipeline_fused import add_checkpoint_provenance, mark_intermediate_metrics
 
 
@@ -182,3 +184,58 @@ def test_shareable_provenance_hashes_models_and_clears_deleted_intermediate_path
     payload = json.loads(metrics.read_text(encoding="utf-8"))
     assert payload["input"] is None and payload["input_name"] == "input.csv"
     assert payload["depth_output"] is None and not payload["intermediate_csv_retained"]
+
+
+def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, monkeypatch: object) -> None:
+    acquisition_path = make_gabor_acquisition(tmp_path)
+    assert cv2.imwrite(str(tmp_path / "holograms/second.png"), np.full((8, 8), 120, dtype=np.uint8))
+    mapping = yaml.safe_load(acquisition_path.read_text(encoding="utf-8"))
+    mapping["background_removal"] = {"enabled": True, "save_workers": 0}
+    acquisition_path.write_text(yaml.safe_dump(mapping), encoding="utf-8")
+    original_yaml = acquisition_path.read_bytes()
+    run_dir = tmp_path / "run"
+    calls = []
+
+    def fake_step(name: str, command: list[str], steps: list[dict[str, object]]) -> None:
+        calls.append(name)
+        steps.append({"step": name})
+
+        def path_arg(flag: str) -> Path:
+            return Path(command[command.index(flag) + 1])
+
+        if name == "yolo_raw_minip_detection":
+            assert sorted(path.name for path in path_arg("--image-dir").glob("*.png")) == ["second.png"]
+            pd.DataFrame([{"file": "second.png"}]).to_csv(path_arg("--out-csv"), index=False)
+            pd.DataFrame([{"frame": 0}]).to_csv(path_arg("--frame-stats-csv"), index=False)
+            path_arg("--summary-json").write_text("{}", encoding="utf-8")
+        elif name == "measure_detection_roi_for_depth_input":
+            pd.DataFrame([{"file": "second.png"}]).to_csv(path_arg("--out-csv"), index=False)
+            path_arg("--summary-json").write_text("{}", encoding="utf-8")
+        elif name == "estimate_depth_and_slice_diameter_fused":
+            prepared = AcquisitionConfig.load(path_arg("--acquisition-config"))
+            assert prepared.source_path == run_dir / "_inputs/background/acquisition.yaml"
+            assert not prepared.background_removal.enabled
+            records = prepared.frame_records()
+            assert len(records) == 1 and records[0].stem == "second"
+            np.testing.assert_array_equal(cv2.imread(str(records[0].primary), cv2.IMREAD_GRAYSCALE), 100)
+            pd.DataFrame([{"frame": 0, "file": "second.png", "x_um": 1.0}]).to_csv(
+                path_arg("--final-output"), index=False,
+            )
+            for flag in ("--metrics-output", "--hybrid-metrics-output"):
+                path_arg(flag).write_text("{}", encoding="utf-8")
+        else:
+            raise AssertionError(f"Unexpected pipeline step {name}")
+
+    command = HoloD3Pipeline(config_with_tiny_weights(tmp_path)).build_command(
+        acquisition=acquisition_path, run_dir=run_dir, limit=1, start_index=1,
+    )
+    monkeypatch.setattr("sys.argv", command[1:])  # type: ignore[attr-defined]
+    monkeypatch.setattr(run_pipeline_fused, "run_step", fake_step)  # type: ignore[attr-defined]
+    run_pipeline_fused.main()
+    summary = json.loads((run_dir / "pipeline_summary.json").read_text())
+    assert summary["background_removal"]["source_frames"] == 2
+    assert summary["background_removal"]["selected_frames"] == 1
+    assert summary["steps"][0]["step"] == "remove_hologram_background"
+    assert summary["background_removal"]["prepared_acquisition_config"] == "run:_inputs/background/acquisition.yaml"
+    assert acquisition_path.read_bytes() == original_yaml
+    assert calls[-1] == "estimate_depth_and_slice_diameter_fused"

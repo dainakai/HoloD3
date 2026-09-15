@@ -8,7 +8,7 @@ import pytest
 import torch
 import yaml
 
-from holod3.config import repository_root
+from holod3.config import PipelineConfig, repository_root
 from holod3.pipeline import HoloD3Pipeline
 
 ROOT = repository_root()
@@ -88,3 +88,39 @@ def test_true_single_gabor_path_reconstructs_minip_without_secondary_image(tmp_p
     assert result.fused_metrics_json is None and result.hybrid_metrics_json is None
     assert (result.run_dir / "_inputs/minip/005302.png").is_file()
     assert not detections.empty
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@requires_cuda
+def test_raw_sequence_background_removal_runs_through_depth_and_diameter(tmp_path: Path) -> None:
+    from holod3.acquisition import AcquisitionConfig
+
+    original = AcquisitionConfig.load(ROOT / "data/demo/experimental/acquisition.yaml")
+    mapping = original.to_dict()
+    mapping["frames"] = {
+        "primary_holograms": str(original.primary_dir),
+        "secondary_holograms": str(original.secondary_dir),
+        "minip": None,
+    }
+    mapping["calibration"]["secondary_distortion_coefficients"] = str(original.distortion_coefficients_path)
+    mapping["background_removal"] = {"enabled": True}
+    mapping["optics"]["slice_count"] = 8
+    acquisition = tmp_path / "raw-acquisition.yaml"
+    acquisition.write_text(yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8")
+    preset = PipelineConfig.preset("portable-torch").to_dict()
+    preset["detection"]["max_detections"] = 20
+    result = HoloD3Pipeline(PipelineConfig.from_mapping(preset)).run(
+        acquisition=acquisition, run_dir=tmp_path / "background-run", limit=1, create_visualization=False,
+    )
+    summary = result.summary()
+    correction = summary["background_removal"]
+    assert correction["source_frames"] == 6 and correction["selected_frames"] == 1
+    assert set(correction["cameras"]) == {"primary", "secondary"}
+    for role in ("primary", "secondary"):
+        assert (result.run_dir / f"_inputs/background/{role}/005302.png").is_file()
+    metrics = json.loads(result.fused_metrics_json.read_text())
+    assert metrics["acquisition_config"] == "run:_inputs/background/acquisition.yaml"
+    particles = result.particles()
+    assert not particles.empty
+    assert {"depth_um", "final_diameter_um"}.issubset(particles.columns)

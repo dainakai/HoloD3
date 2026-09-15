@@ -153,6 +153,11 @@ def load_frame_arrays(
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Load, transform, calibrate, and shape-check one frame on the CPU."""
 
+    if config.background_removal.enabled:
+        raise ValueError(
+            "Prepare temporal backgrounds with prepare_background_holograms or HoloD3Pipeline.run "
+            "before loading a wavefront."
+        )
     primary_np = load_transformed_image(
         record.primary,
         config.transform_steps("primary"),
@@ -254,6 +259,13 @@ def prepare_minip_images(
 
     destination = Path(output_dir).expanduser().resolve()
     destination.mkdir(parents=True, exist_ok=True)
+    background_summary = None
+    if config.background_removal.enabled:
+        from holod3.background import prepare_background_holograms
+
+        config, records, background_summary = prepare_background_holograms(
+            config, records, destination / "_background", device=device, overwrite=overwrite,
+        )
     torch_device = torch.device(device if torch.cuda.is_available() or not str(device).startswith("cuda") else "cpu")
     setup = build_propagation_setup(config, torch_device)
     generated = config.minip_dir is None
@@ -293,10 +305,18 @@ def prepare_minip_images(
                     f"expected {(setup.image_size, setup.image_size)} after transforms."
                 )
             outputs.append(save_grayscale_png(output, image))
-    return {
+    if overwrite:
+        selected_names = {path.name for path in outputs}
+        for stale in destination.glob("*.png"):
+            if stale.name not in selected_names:
+                stale.unlink()
+    summary = {
         "mode": config.mode,
         "source": "reconstructed" if generated else "provided",
         "frames": len(outputs),
         "output_dir": str(destination),
         "device": str(torch_device),
     }
+    if background_summary is not None:
+        summary["background_removal"] = background_summary
+    return summary

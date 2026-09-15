@@ -87,6 +87,53 @@ class CalibrationConfig:
 
 
 @dataclass(frozen=True)
+class BackgroundRemovalConfig:
+    """Optional temporal background correction, with intensity levels in [0, 255]."""
+
+    enabled: bool = False
+    window: int = 129
+    anchor_stride: int = 32
+    batch_size: int = 16
+    lowpass: int = 0
+    target_level: float | None = None
+    median_backend: str = "auto"
+    save_workers: int = 4
+
+    @classmethod
+    def from_mapping(cls, value: Any) -> BackgroundRemovalConfig:
+        if not isinstance(value, Mapping):
+            raise ValueError("background_removal must be a mapping")
+        unknown = sorted(set(value) - set(cls.__dataclass_fields__))
+        if unknown:
+            raise ValueError(f"Unknown background_removal keys: {unknown}")
+        return cls(**dict(value))
+
+    def validate(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError("background_removal.enabled must be a boolean")
+        for name in ("window", "anchor_stride", "batch_size", "lowpass", "save_workers"):
+            number = getattr(self, name)
+            if isinstance(number, bool) or not isinstance(number, int):
+                raise ValueError(f"background_removal.{name} must be an integer")
+            minimum = 0 if name in {"lowpass", "save_workers"} else 1
+            if number < minimum:
+                raise ValueError(f"background_removal.{name} must be at least {minimum}")
+        if self.window % 2 == 0:
+            raise ValueError("background_removal.window must be odd")
+        if self.median_backend not in ("auto", "torch", "cuda-window", "cuda-rolling"):
+            raise ValueError("background_removal.median_backend must be auto, torch, cuda-window, or cuda-rolling")
+        if self.median_backend == "cuda-rolling" and self.window > 255:
+            raise ValueError("background_removal.window must be <= 255 for cuda-rolling")
+        if self.target_level is not None and (
+            isinstance(self.target_level, bool)
+            or not isinstance(self.target_level, (int, float))
+            or not math.isfinite(self.target_level)
+            or not 0 <= self.target_level <= 255
+        ):
+            raise ValueError("background_removal.target_level must be finite and in [0, 255]")
+
+
+@dataclass(frozen=True)
 class FrameRecord:
     """Resolved files for one synchronized frame."""
 
@@ -109,6 +156,7 @@ class AcquisitionConfig:
     reconstruction: ReconstructionSettings = field(default_factory=ReconstructionSettings)
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
     transforms: dict[str, tuple[TransformStep, ...]] = field(default_factory=dict)
+    background_removal: BackgroundRemovalConfig = field(default_factory=BackgroundRemovalConfig)
     source_path: Path | None = field(default=None, repr=False, compare=False)
 
     @classmethod
@@ -119,7 +167,7 @@ class AcquisitionConfig:
         source_path: str | Path | None = None,
     ) -> AcquisitionConfig:
         required = {"schema_version", "name", "description", "mode", "frames", "optics"}
-        optional = {"reconstruction", "calibration", "transforms"}
+        optional = {"reconstruction", "calibration", "transforms", "background_removal"}
         missing = sorted(required - set(value))
         unknown = sorted(set(value) - required - optional)
         if missing or unknown:
@@ -149,6 +197,7 @@ class AcquisitionConfig:
             reconstruction=ReconstructionSettings(**dict(value.get("reconstruction", {}))),
             calibration=CalibrationConfig(**dict(value.get("calibration", {}))),
             transforms=transforms,
+            background_removal=BackgroundRemovalConfig.from_mapping(value.get("background_removal", {})),
             source_path=Path(source_path).expanduser().resolve() if source_path is not None else None,
         )
         config.validate_schema()
@@ -196,6 +245,12 @@ class AcquisitionConfig:
         return self.resolve_path(self.calibration.secondary_distortion_coefficients)
 
     def validate_schema(self) -> None:
+        self.background_removal.validate()
+        if self.background_removal.enabled and self.frames.minip is not None:
+            raise ValueError(
+                "background_removal.enabled requires frames.minip: null so MinIP and depth/diameter "
+                "use the same corrected holograms."
+            )
         if self.schema_version != 1:
             raise ValueError(f"Unsupported acquisition schema_version: {self.schema_version}")
         if not self.name.strip():
@@ -266,6 +321,8 @@ class AcquisitionConfig:
         """Resolve synchronized frames and reject partial or ambiguous inputs."""
 
         primary = self._image_map(self.primary_dir, "primary hologram")
+        if self.background_removal.enabled and len(primary) < 2:
+            raise ValueError("Background removal requires at least two source frames; disable it for an isolated hologram.")
         secondary_dir = self.secondary_dir
         secondary = self._image_map(secondary_dir, "secondary hologram") if secondary_dir is not None else None
         minip_dir = self.minip_dir
@@ -319,10 +376,11 @@ class AcquisitionConfig:
     def validate_image_contracts(self, records: list[FrameRecord] | None = None) -> list[FrameRecord]:
         """Execute configured transforms and verify every input image shape."""
 
-        from holod3.transforms import load_transformed_image
+        from holod3.transforms import apply_transforms, load_transformed_image
 
         selected = records if records is not None else self.frame_records()
         expected = (self.optics.image_size_px, self.optics.image_size_px)
+        sensor_shapes: dict[str, tuple[int, int]] = {}
         for record in selected:
             for role, path in (
                 ("primary", record.primary),
@@ -331,7 +389,19 @@ class AcquisitionConfig:
             ):
                 if path is None:
                     continue
-                image = load_transformed_image(path, self.transform_steps(role), base_dir=self.base_dir)
+                if self.background_removal.enabled and role != "minip":
+                    from src.preprocessing.backrem_adaptive import load_gray
+
+                    raw = load_gray(path)
+                    previous_shape = sensor_shapes.setdefault(role, raw.shape)
+                    if raw.shape != previous_shape:
+                        raise ValueError(f"Background removal requires consistent {role} sensor dimensions: {path}")
+                    lowpass = self.background_removal.lowpass
+                    if lowpass > 1 and lowpass // 2 >= min(raw.shape):
+                        raise ValueError("background_removal.lowpass is too large for the input image dimensions")
+                    image = apply_transforms(raw, self.transform_steps(role), base_dir=self.base_dir)
+                else:
+                    image = load_transformed_image(path, self.transform_steps(role), base_dir=self.base_dir)
                 if image.shape != expected:
                     raise ValueError(
                         f"{role} frame {record.stem!r} has shape {image.shape}; "

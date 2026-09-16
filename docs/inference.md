@@ -2,6 +2,8 @@
 
 ## Processing flow
 
+When enabled in the acquisition, [temporal background removal](acquisitions.md#temporal-background-removal) first estimates each camera's background from the full source sequence and saves corrected selected holograms. Image transforms and calibration follow this correction. Detection and depth/diameter inference share these corrected inputs.
+
 For every selected frame, HoloD3:
 
 1. copies a supplied MinIP or reconstructs one from raw holograms;

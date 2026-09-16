@@ -6,13 +6,14 @@ HoloD3 detects particles in hologram minimum-intensity projections (MinIP), esti
 
 - validated dual-camera phase-retrieval inference;
 - single-hologram inline Gabor reconstruction;
+- optional streaming temporal background removal for raw image sequences;
 - optional depth and diameter fallback rules;
 - direct checkpoint overrides for custom models;
 - CSV output and a self-contained animated 3D scatter plot;
 - CLI, Python, and trusted-local Web UI workflows; and
 - checksum-verified training reproduction from private Hugging Face bundles.
 
-Measurements are independent per frame. HoloD3 does not perform temporal tracking.
+Particle measurements are independent per frame. Optional background removal uses neighbouring frames to estimate illumination. HoloD3 does not perform temporal tracking.
 
 ## One-frame quick start
 
@@ -84,6 +85,26 @@ transforms:
 ```
 
 Transform functions receive a two-dimensional `float32` grayscale array in `[0, 1]` and return an array with the same contract. See [Acquisition configuration](docs/acquisitions.md).
+
+### Background removal for raw sequences
+
+Enable temporal background correction in `acquisition.yaml` and regenerate MinIP from the corrected holograms:
+
+```yaml
+frames:
+  primary_holograms: holograms/primary
+  secondary_holograms: holograms/secondary   # omit for single_gabor
+  minip: null
+
+background_removal:
+  enabled: true
+  window: 129
+  anchor_stride: 32
+```
+
+Run the same `holod3 infer` command shown above. This also works through the Python API and Web UI. HoloD3 estimates a temporal median background for each camera, interpolates between background anchors, and corrects global, row, and column illumination offsets before transforms and calibration. Both MinIP generation and depth/diameter inference read the saved corrected holograms.
+
+The input must be an 8-bit sequence with at least two source frames. Background estimation uses the complete acquisition even with `--limit 1`; only selected corrected frames are saved and inferred. Omit `background_removal` or leave `enabled: false` for already-corrected inputs and isolated holograms. See [background settings and outputs](docs/acquisitions.md#temporal-background-removal).
 
 ## Single-hologram Gabor mode
 

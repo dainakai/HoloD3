@@ -23,6 +23,18 @@ reconstruction:
   fft_padding_side: 1536
   minip_slice_step: 2
 
+background_removal:
+  # Enable for raw 8-bit sequences and set frames.minip to null above.
+  # Leave disabled for images that are already background-corrected.
+  enabled: false
+  window: 129
+  anchor_stride: 32
+  batch_size: 16
+  median_backend: auto
+  lowpass: 0
+  target_level: null
+  save_workers: 4
+
 calibration:
   # Use null when the cameras are already registered by a custom transform.
   secondary_distortion_coefficients: calibration/secondary_distortion_coefficients.txt

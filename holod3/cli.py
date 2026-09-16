@@ -265,6 +265,7 @@ def command_validate_acquisition(args: argparse.Namespace) -> int:
         "last_frame": records[-1].stem,
         "minip": "provided" if acquisition.minip_dir is not None else "generated from raw holograms",
         "optics": acquisition.to_dict()["optics"],
+        "background_removal": acquisition.to_dict()["background_removal"],
     }
     if acquisition.mode == "single_gabor":
         payload["model_domain_warning"] = (

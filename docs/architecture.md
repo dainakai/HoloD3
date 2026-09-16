@@ -4,7 +4,8 @@ HoloD3 separates portable acquisition geometry from model/runtime policy and con
 
 ```mermaid
 flowchart TD
-    A[acquisition.yaml] --> B{holography mode}
+    A[acquisition.yaml] --> BG[optional temporal background correction per camera]
+    BG --> B{holography mode}
     B -->|dual_phase_retrieval| C[primary + registered secondary intensity]
     B -->|single_gabor| D[single intensity image]
     C --> E[alternating amplitude constraints]
@@ -37,6 +38,7 @@ flowchart TD
 
 - `holod3/acquisition.py` validates acquisition schema, resolves relative paths, synchronizes image stems, and selects frames.
 - `holod3/transforms.py` normalizes images and resolves built-in or user-provided transform functions.
+- `holod3/background.py` prepares corrected holograms and a shared acquisition for MinIP and depth/diameter inference.
 - `holod3/reconstruction.py` implements shared dual-camera phase retrieval, single-Gabor initialization, propagation setup, distortion calibration, and MinIP generation.
 - `holod3/config.py` validates inference model/runtime/fallback policy.
 - `holod3/pipeline.py` exposes the Python facade and invokes the executable core.
@@ -47,7 +49,7 @@ flowchart TD
 
 ## Executable core
 
-`src/pipeline/run_pipeline_fused.py` is the only complete pipeline entry point. It materializes exact MinIP inputs, runs detector and ROI measurement stages, and invokes the fused depth/diameter core.
+`src/pipeline/run_pipeline_fused.py` is the only complete pipeline entry point. It optionally corrects temporal backgrounds, materializes exact MinIP inputs, runs detector and ROI measurement stages, and invokes the fused depth/diameter core. Background estimation uses the complete acquisition while later stages process the selected frames. `src/preprocessing/` contains the two-pass numerical correction and optional CUDA median kernels.
 
 `src/detection/depth_and_slice_fused.py` groups rows by frame, loads transformed raw holograms, creates a mode-specific wavefront, propagates through configured slices, crops particle regions, evaluates depth scores, selects a slice, and evaluates diameter without materializing a full 3D volume on disk.
 

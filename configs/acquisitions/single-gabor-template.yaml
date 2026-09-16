@@ -23,6 +23,18 @@ reconstruction:
   fft_padding_side: 1536
   minip_slice_step: 2
 
+background_removal:
+  # Enable for raw 8-bit temporal sequences (at least two source frames).
+  # Leave disabled for an isolated hologram or already-corrected images.
+  enabled: false
+  window: 129
+  anchor_stride: 32
+  batch_size: 16
+  median_backend: auto
+  lowpass: 0
+  target_level: null
+  save_workers: 4
+
 calibration:
   secondary_distortion_coefficients: null
 

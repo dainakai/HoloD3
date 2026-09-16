@@ -343,7 +343,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="holod3",
         description="Detect hologram particles and estimate their 3D depth and diameter.",
     )
-    parser.add_argument("--version", action="version", version="HoloD3 0.1.1")
+    parser.add_argument("--version", action="version", version="HoloD3 0.2.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     verify = subparsers.add_parser("verify", help="Verify downloaded production model hashes.")

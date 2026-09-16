@@ -2,9 +2,9 @@ cff-version: 1.2.0
 message: "If you use HoloD3 in your research, please cite the software using the metadata below."
 type: software
 title: "HoloD3"
-version: 0.1.1
-date-released: 2026-08-27
-doi: 10.5281/zenodo.22125703
+version: 0.2.0
+date-released: 2026-09-16
+doi: 10.5281/zenodo.22125418
 authors:
   - given-names: "Dai"
     family-names: "Nakai"

@@ -15,6 +15,8 @@ HoloD3 detects particles in hologram minimum-intensity projections (MinIP), esti
 
 Particle measurements are independent per frame. Optional background removal uses neighbouring frames to estimate illumination. HoloD3 does not perform temporal tracking.
 
+Version 0.2.2 accelerates the TensorRT production path by reusing selected depth crops and inference inputs, and fusing inverse-FFT normalization. See [runtime options and numerical behavior](docs/inference.md#tensorrt-reuse-in-v022) and [release validation](docs/validation.md#version-022-tensorrt-validation).
+
 ## One-frame quick start
 
 HoloD3 targets Python 3.12 and uses [uv](https://docs.astral.sh/uv/) for a reproducible environment.

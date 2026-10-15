@@ -41,6 +41,33 @@ uv run holod3 config --preset portable-torch
 uv run holod3 config --preset production
 ```
 
+### TensorRT reuse in v0.2.2
+
+The production preset enables three additional runtime options. The portable preset and older custom YAML files that omit these keys leave them disabled.
+
+| Runtime setting | Behavior |
+| --- | --- |
+| `reuse_depth_crops` | Retain each particle's best depth-search crop and use it for diameter inference, avoiding a second propagation and reconstruction pass. |
+| `depth_input_reuse` | Reuse TensorRT image-input storage and fixed diameter conditioning within each frame and model. Update the image immediately before each inference batch. |
+| `fuse_ifft_normalization` | Apply the inverse-FFT scale during cuFFT's final output write, removing a separate normalization pass. |
+
+All configured depth planes, inference batch boundaries, model weights, and precisions are retained. The packaged depth models consume one image channel and one diameter scalar. Image normalization remains `(image - 0.5) / 0.25`; it is separate from IFFT normalization. Input reuse applies only to TensorRT, resets between frames/routing groups, and uses the original preparation for partial or changed block shapes.
+
+Crop reuse preserves the depth search's routing and tie rules and the diameter model's batch order. It is automatically disabled when slice recentering is enabled or diameter inference uses per-depth batches. Reused crops can differ slightly from the former diameter pass: the depth search and the former pass reach the same plane through different floating-point multiplication histories. Eight-bit diameter preprocessing can amplify those small differences. In the six-frame release audit, depth scores and selected depths were identical; maximum final-diameter difference was about `0.45 µm`. See [validation results](validation.md#version-022-tensorrt-validation). These observed differences are not a universal error bound. Diameter crops never feed back into depth propagation or phase retrieval.
+
+The optional normalized IFFT requires the GPU extra and compatible NVRTC/cuFFT LTO bindings. HoloD3 creates one stream-owned, out-of-place complex64 plan per core run and compares its output with Torch before the first frame. Unsupported setup or a preflight mismatch emits a warning and selects the original Torch FFT; the learned models remain on the requested TensorRT backend. Plan setup is included in core elapsed time. Execution errors after processing starts stop the run. MinIP and phase retrieval use their existing paths.
+
+Each setting has matching `--name` / `--no-name` overrides on `infer` and `demo`. To use the former reconstruction/diameter path while retaining TensorRT and CUDA Graphs:
+
+```bash
+uv run holod3 infer \
+  --acquisition my-acquisition/acquisition.yaml \
+  --run-dir runs/reference-path --preset production \
+  --no-reuse-depth-crops --no-depth-input-reuse --no-fuse-ifft-normalization
+```
+
+`pipeline_summary.json` records requested performance options. The fused-stage metrics report requested/effective reuse flags, `ifft_plan_setup_sec`, and `ifft_normalization_fallback`, alongside graph capture/replay counters. Inspect these fields before attributing a speedup to an optional path.
+
 ## Complete CLI example
 
 ```bash

@@ -40,6 +40,9 @@ runtime:
   diameter_model_backend: torch
   depth_batch_size: 256
   depth_cuda_graphs: false
+  reuse_depth_crops: false
+  depth_input_reuse: false
+  fuse_ifft_normalization: false
   diameter_batch_size: 512
   strict_backend: false
   roi_image_prefetch_workers: 2

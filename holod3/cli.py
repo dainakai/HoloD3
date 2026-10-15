@@ -54,8 +54,9 @@ def _config_with_cli_overrides(args: argparse.Namespace) -> PipelineConfig:
         runtime_changes["strict_backend"] = args.strict_backend
     elif any(runtime_changes.get(key) == "torch" for key in ("depth_model_backend", "diameter_model_backend")):
         runtime_changes["strict_backend"] = False
-    if getattr(args, "depth_cuda_graphs", None) is not None:
-        runtime_changes["depth_cuda_graphs"] = args.depth_cuda_graphs
+    for name in ("depth_cuda_graphs", "reuse_depth_crops", "depth_input_reuse", "fuse_ifft_normalization"):
+        if getattr(args, name, None) is not None:
+            runtime_changes[name] = getattr(args, name)
     if runtime_changes:
         config = config.with_runtime(**runtime_changes)
     fallback_changes: dict[str, Any] = {}
@@ -405,6 +406,9 @@ def build_parser() -> argparse.ArgumentParser:
     infer.add_argument("--run-dir", required=True)
     infer.add_argument("--preset", default="production", help="Preset name or inference YAML path.")
     infer.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=None)
+    infer.add_argument("--reuse-depth-crops", action=argparse.BooleanOptionalAction, default=None)
+    infer.add_argument("--depth-input-reuse", action=argparse.BooleanOptionalAction, default=None)
+    infer.add_argument("--fuse-ifft-normalization", action=argparse.BooleanOptionalAction, default=None)
     infer.add_argument("--limit", type=int, default=1, help="Maximum frames; use 0 to process all frames.")
     infer.add_argument("--start-index", type=int, default=None)
     infer.add_argument("--end-index", type=int, default=None)
@@ -431,6 +435,9 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--run-dir", default="runs/demo")
     demo.add_argument("--preset", default="portable-torch", help="Preset name or inference YAML path.")
     demo.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=None)
+    demo.add_argument("--reuse-depth-crops", action=argparse.BooleanOptionalAction, default=None)
+    demo.add_argument("--depth-input-reuse", action=argparse.BooleanOptionalAction, default=None)
+    demo.add_argument("--fuse-ifft-normalization", action=argparse.BooleanOptionalAction, default=None)
     demo.add_argument("--limit", type=int, default=0, help="Maximum demo frames; 0 uses all included frames.")
     demo.add_argument("--device", default=None)
     demo.add_argument("--yolo-device", default=None)

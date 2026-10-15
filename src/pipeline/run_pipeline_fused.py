@@ -89,6 +89,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--depth-model-backend", choices=["tensorrt", "torch"], default="tensorrt")
     p.add_argument("--depth-batch-size", type=int, default=256)
     p.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--reuse-depth-crops", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--depth-input-reuse", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--fuse-ifft-normalization", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--depth-slice-block", type=int, default=8)
     p.add_argument("--depth-crop-size", type=int, default=64)
     p.add_argument("--depth-slice-start", type=int, default=1)
@@ -413,6 +416,9 @@ def main() -> None:
     ]
     fused_cmd.append("--depth-router" if args.depth_router else "--no-depth-router")
     fused_cmd.append("--depth-cuda-graphs" if args.depth_cuda_graphs else "--no-depth-cuda-graphs")
+    fused_cmd.append("--reuse-depth-crops" if args.reuse_depth_crops else "--no-reuse-depth-crops")
+    fused_cmd.append("--depth-input-reuse" if args.depth_input_reuse else "--no-depth-input-reuse")
+    fused_cmd.append("--fuse-ifft-normalization" if args.fuse_ifft_normalization else "--no-fuse-ifft-normalization")
     fused_cmd.append(
         "--diameter-underprediction-fallback"
         if args.diameter_underprediction_fallback
@@ -511,6 +517,9 @@ def main() -> None:
             "depth_buffer_reuse": bool(args.depth_buffer_reuse),
             "depth_inplace_propagation": bool(args.depth_inplace_propagation),
             "depth_cuda_graphs": bool(args.depth_cuda_graphs),
+            "reuse_depth_crops": bool(args.reuse_depth_crops),
+            "depth_input_reuse": bool(args.depth_input_reuse),
+            "fuse_ifft_normalization": bool(args.fuse_ifft_normalization),
         },
         "outputs": {
             "raw_detections_csv": portable_path(raw_csv, run_dir=run_dir),

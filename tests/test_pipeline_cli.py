@@ -92,6 +92,8 @@ def test_build_command_wires_acquisition_models_and_fallbacks(
     assert "--no-bbox-fallback" in command
     assert "--no-depth-router" in command
     assert "--no-depth-cuda-graphs" in command
+    for name in ("reuse-depth-crops", "depth-input-reuse", "fuse-ifft-normalization"):
+        assert f"--no-{name}" in command
     assert "--no-diameter-underprediction-fallback" in command
 
 
@@ -166,6 +168,9 @@ def test_cli_infer_dry_run_accepts_direct_weight_overrides(tmp_path: Path, capsy
             weights.diameter,
             "--dry-run",
             "--depth-cuda-graphs",
+            "--reuse-depth-crops",
+            "--depth-input-reuse",
+            "--fuse-ifft-normalization",
         ]
     )
     output = capsys.readouterr().out  # type: ignore[attr-defined]
@@ -174,6 +179,9 @@ def test_cli_infer_dry_run_accepts_direct_weight_overrides(tmp_path: Path, capsy
     assert "--acquisition-config" in output
     assert str(tmp_path / "yolo.pt") in output
     assert "--depth-cuda-graphs" in output
+    for name in ("reuse-depth-crops", "depth-input-reuse", "fuse-ifft-normalization"):
+        assert f"--{name}" in output
+        assert f"--no-{name}" not in output
 
 
 def test_shareable_provenance_hashes_models_and_clears_deleted_intermediate_paths(tmp_path: Path) -> None:
@@ -198,7 +206,8 @@ def test_shareable_provenance_hashes_models_and_clears_deleted_intermediate_path
     assert payload["depth_output"] is None and not payload["intermediate_csv_retained"]
 
 
-def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, monkeypatch: object) -> None:
+@pytest.mark.parametrize("reuse", [False, True])
+def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, monkeypatch: object, reuse: bool) -> None:
     acquisition_path = make_gabor_acquisition(tmp_path)
     assert cv2.imwrite(str(tmp_path / "holograms/second.png"), np.full((8, 8), 120, dtype=np.uint8))
     mapping = yaml.safe_load(acquisition_path.read_text(encoding="utf-8"))
@@ -225,6 +234,8 @@ def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, mo
             path_arg("--summary-json").write_text("{}", encoding="utf-8")
         elif name == "estimate_depth_and_slice_diameter_fused":
             assert "--no-depth-cuda-graphs" in command
+            for name in ("reuse-depth-crops", "depth-input-reuse", "fuse-ifft-normalization"):
+                assert f"--{'' if reuse else 'no-'}{name}" in command
             prepared = AcquisitionConfig.load(path_arg("--acquisition-config"))
             assert prepared.source_path == run_dir / "_inputs/background/acquisition.yaml"
             assert not prepared.background_removal.enabled
@@ -239,7 +250,10 @@ def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, mo
         else:
             raise AssertionError(f"Unexpected pipeline step {name}")
 
-    command = HoloD3Pipeline(config_with_tiny_weights(tmp_path)).build_command(
+    config = config_with_tiny_weights(tmp_path).with_runtime(
+        reuse_depth_crops=reuse, depth_input_reuse=reuse, fuse_ifft_normalization=reuse,
+    )
+    command = HoloD3Pipeline(config).build_command(
         acquisition=acquisition_path, run_dir=run_dir, limit=1, start_index=1,
     )
     monkeypatch.setattr("sys.argv", command[1:])  # type: ignore[attr-defined]
@@ -248,6 +262,8 @@ def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, mo
     summary = json.loads((run_dir / "pipeline_summary.json").read_text())
     assert summary["background_removal"]["source_frames"] == 2
     assert summary["performance_options"]["depth_cuda_graphs"] is False
+    for name in ("reuse_depth_crops", "depth_input_reuse", "fuse_ifft_normalization"):
+        assert summary["performance_options"][name] is reuse
     assert summary["background_removal"]["selected_frames"] == 1
     assert summary["steps"][0]["step"] == "remove_hologram_background"
     assert summary["background_removal"]["prepared_acquisition_config"] == "run:_inputs/background/acquisition.yaml"

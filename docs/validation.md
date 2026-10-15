@@ -8,6 +8,8 @@ The test suite covers:
 - built-in and file/module custom transform contracts;
 - dual-camera phase retrieval and single-Gabor wavefront construction on CPU fixtures;
 - MinIP preparation and image-shape validation;
+- exact CUDA/Torch MinIP equality, including NaNs, subnormal values, odd padding offsets, slice strides, autograd fallback, and non-default device streams;
+- CUDA Graph input replay, shape bounds, capture/equality failure fallback, and packaged depth-model score equality;
 - semantic inference/model configuration;
 - pipeline command construction and model overrides;
 - optional fallback rules and physical coordinate scaling;
@@ -31,6 +33,16 @@ Run model/GPU integration checks after fetching checkpoints:
 uv run holod3 fetch-models --scope production
 uv run pytest -m integration
 ```
+
+Audit every depth score, compare all depth/diameter/final CSV columns, and benchmark the CUDA optimizations with identical compiled engines:
+
+```bash
+uv sync --frozen --extra gpu
+uv run python -m scripts.validate_cuda_optimizations \
+  --run-dir runs/cuda-validation --backend tensorrt --device 0 --repeats 3
+```
+
+This requires a new output directory and runs all six demo frames at the full 1,024-plane depth grid. The first eager/graph pair copies every score to the CPU for an exact audit and is excluded from timing. Later pairs alternate execution order, include per-frame graph capture, and reuse the same loaded models and TensorRT engines. MinIP timing is separate and includes all configured MinIP planes; its first FFT/kernel setup is excluded. `results.json` records raw timing samples, exact-comparison counts, graph statistics, and peak Torch tensor memory. These core timings exclude engine compilation, detector/ROI preprocessing, and subprocess startup; they are not end-to-end CLI speedups.
 
 ## Experimental demo smoke result
 

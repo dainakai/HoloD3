@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use HoloD3 in your research, please cite the software using the metadata below."
 type: software
 title: "HoloD3"
-version: 0.2.0
-date-released: 2026-09-16
+version: 0.2.1
+date-released: 2026-10-15
 doi: 10.5281/zenodo.22125418
 authors:
   - given-names: "Dai"

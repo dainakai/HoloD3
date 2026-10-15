@@ -88,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--yolo-image-load-workers", type=int, default=4)
     p.add_argument("--depth-model-backend", choices=["tensorrt", "torch"], default="tensorrt")
     p.add_argument("--depth-batch-size", type=int, default=256)
+    p.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--depth-slice-block", type=int, default=8)
     p.add_argument("--depth-crop-size", type=int, default=64)
     p.add_argument("--depth-slice-start", type=int, default=1)
@@ -411,6 +412,7 @@ def main() -> None:
         str(args.hybrid_min_bbox_side_um),
     ]
     fused_cmd.append("--depth-router" if args.depth_router else "--no-depth-router")
+    fused_cmd.append("--depth-cuda-graphs" if args.depth_cuda_graphs else "--no-depth-cuda-graphs")
     fused_cmd.append(
         "--diameter-underprediction-fallback"
         if args.diameter_underprediction_fallback
@@ -508,6 +510,7 @@ def main() -> None:
             "slice_diam_frame_batch": bool(args.slice_diam_frame_batch),
             "depth_buffer_reuse": bool(args.depth_buffer_reuse),
             "depth_inplace_propagation": bool(args.depth_inplace_propagation),
+            "depth_cuda_graphs": bool(args.depth_cuda_graphs),
         },
         "outputs": {
             "raw_detections_csv": portable_path(raw_csv, run_dir=run_dir),

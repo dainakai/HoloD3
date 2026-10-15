@@ -7,14 +7,23 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 import pandas as pd
+import pytest
 import yaml
 
+from holod3 import __version__
 from holod3.acquisition import AcquisitionConfig
 from holod3.cli import main
 from holod3.config import PipelineConfig
 from holod3.pipeline import HoloD3Pipeline
 from src.pipeline import run_pipeline_fused
 from src.pipeline.run_pipeline_fused import add_checkpoint_provenance, mark_intermediate_metrics
+
+
+def test_cli_version_matches_package(capsys: object) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"HoloD3 {__version__}"  # type: ignore[attr-defined]
 
 
 def make_gabor_acquisition(tmp_path: Path) -> Path:
@@ -82,6 +91,7 @@ def test_build_command_wires_acquisition_models_and_fallbacks(
     assert "--yolo-imgsz 1024" in joined
     assert "--no-bbox-fallback" in command
     assert "--no-depth-router" in command
+    assert "--no-depth-cuda-graphs" in command
     assert "--no-diameter-underprediction-fallback" in command
 
 
@@ -155,6 +165,7 @@ def test_cli_infer_dry_run_accepts_direct_weight_overrides(tmp_path: Path, capsy
             "--diameter-weights",
             weights.diameter,
             "--dry-run",
+            "--depth-cuda-graphs",
         ]
     )
     output = capsys.readouterr().out  # type: ignore[attr-defined]
@@ -162,6 +173,7 @@ def test_cli_infer_dry_run_accepts_direct_weight_overrides(tmp_path: Path, capsy
     assert "run_pipeline_fused.py" in output
     assert "--acquisition-config" in output
     assert str(tmp_path / "yolo.pt") in output
+    assert "--depth-cuda-graphs" in output
 
 
 def test_shareable_provenance_hashes_models_and_clears_deleted_intermediate_paths(tmp_path: Path) -> None:
@@ -212,6 +224,7 @@ def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, mo
             pd.DataFrame([{"file": "second.png"}]).to_csv(path_arg("--out-csv"), index=False)
             path_arg("--summary-json").write_text("{}", encoding="utf-8")
         elif name == "estimate_depth_and_slice_diameter_fused":
+            assert "--no-depth-cuda-graphs" in command
             prepared = AcquisitionConfig.load(path_arg("--acquisition-config"))
             assert prepared.source_path == run_dir / "_inputs/background/acquisition.yaml"
             assert not prepared.background_removal.enabled
@@ -234,6 +247,7 @@ def test_pipeline_passes_corrected_acquisition_to_depth_stage(tmp_path: Path, mo
     run_pipeline_fused.main()
     summary = json.loads((run_dir / "pipeline_summary.json").read_text())
     assert summary["background_removal"]["source_frames"] == 2
+    assert summary["performance_options"]["depth_cuda_graphs"] is False
     assert summary["background_removal"]["selected_frames"] == 1
     assert summary["steps"][0]["step"] == "remove_hologram_background"
     assert summary["background_removal"]["prepared_acquisition_config"] == "run:_inputs/background/acquisition.yaml"

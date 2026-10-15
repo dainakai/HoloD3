@@ -26,9 +26,19 @@ def test_presets_use_semantic_model_paths_and_preserve_backend_policy() -> None:
     assert set(production.to_dict()["models"].values()) == expected
     assert production.runtime.strict_backend
     assert production.runtime.depth_model_backend == "tensorrt"
+    assert production.runtime.depth_cuda_graphs
     assert not portable.runtime.strict_backend
     assert portable.runtime.depth_model_backend == "torch"
+    assert not portable.runtime.depth_cuda_graphs
     assert portable.runtime.device == "auto" and portable.runtime.yolo_device == "auto"
+
+
+def test_cuda_graph_config_is_optional_and_boolean() -> None:
+    mapping = PipelineConfig.preset("portable-torch").to_dict()
+    del mapping["runtime"]["depth_cuda_graphs"]
+    assert not PipelineConfig.from_mapping(mapping).runtime.depth_cuda_graphs
+    with pytest.raises(ValueError, match="depth_cuda_graphs must be a boolean"):
+        PipelineConfig.from_mapping(mapping).with_runtime(depth_cuda_graphs="false")
 
 
 def test_strict_backend_rejects_torch_model_backends() -> None:

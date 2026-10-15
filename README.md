@@ -186,6 +186,8 @@ Run individual stages after reviewing GPU device values and storage requirements
 - [Architecture](docs/architecture.md): processing flow and extension points.
 - [Model card](docs/model-card.md): model domains, metrics, and limitations.
 - [Validation](docs/validation.md): tests and recorded smoke results.
+- [Version 0.2.1](docs/release-0.2.1.md): output-preserving CUDA optimizations, validation, and measured performance.
+- [FFT fusion design](docs/fft-fusion-design.md): follow-up candidates, memory analysis, speedup bounds, and exact-output experiment gates.
 - [Repository layout](docs/repository-layout.md): directory ownership, downloaded assets, and run outputs.
 
 ## Access and licensing

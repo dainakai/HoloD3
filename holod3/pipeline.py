@@ -225,6 +225,7 @@ class HoloD3Pipeline:
         ]
         command.append("--bbox-fallback" if fallbacks.minip_bbox else "--no-bbox-fallback")
         command.append("--depth-router" if fallbacks.depth_router else "--no-depth-router")
+        command.append("--depth-cuda-graphs" if runtime.depth_cuda_graphs else "--no-depth-cuda-graphs")
         command.append(
             "--diameter-underprediction-fallback"
             if fallbacks.diameter_underprediction

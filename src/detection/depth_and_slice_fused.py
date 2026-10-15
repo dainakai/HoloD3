@@ -57,6 +57,7 @@ from src.detection.depth_runtime import (  # noqa: E402
     run_model_batches,
     slice_values,
 )
+from src.common.cuda_graph import CudaGraphScorer  # noqa: E402
 from src.diam.inference import (  # noqa: E402
     optimize_slice_model_backend,
     predict_diameter_batch,
@@ -129,6 +130,7 @@ def parse_args() -> argparse.Namespace:
         help="Optional FFT-side override; 0 uses acquisition.reconstruction.fft_padding_side.",
     )
     p.add_argument("--depth-batch-size", type=int, default=256)
+    p.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--diam-batch-size", type=int, default=512)
     p.add_argument("--diam-model-backend", choices=["tensorrt", "torch"], default="tensorrt")
     p.add_argument("--amp", action="store_true", help="Deprecated for TensorRT backend; kept for torch fallback.")
@@ -708,6 +710,17 @@ def main() -> None:
         else None
     )
 
+    graph_stats: list[dict[str, Any]] = []
+
+    def make_scorer(model: Any, info: dict[str, Any]) -> CudaGraphScorer:
+        return CudaGraphScorer(
+            lambda crops, diam: run_model_batches(
+                model, crops, diam, info, args.depth_batch_size, args.amp,
+                args.channels_last, acquisition.optics.pixel_pitch_um,
+            ),
+            enabled=bool(args.depth_cuda_graphs and len(slices) >= 2 * args.slice_block),
+        )
+
     with torch.inference_mode():
         for frame_i, (file_name, indices) in enumerate(groups, start=1):
             rows = df.loc[indices].reset_index(drop=True)
@@ -761,6 +774,8 @@ def main() -> None:
             has_fallback = bool(frame_route_to_fallback.any().item())
 
             d0 = time.perf_counter()
+            primary_scorer = make_scorer(depth_model, depth_info)
+            fallback_scorer = make_scorer(depth_fallback_model, depth_fallback_info) if has_fallback else None
             block_crops: list[torch.Tensor] = []
             block_slices: list[int] = []
             block_count = 0
@@ -788,16 +803,7 @@ def main() -> None:
                 else:
                     crops = torch.cat(block_crops, dim=0)
                     diam = diam_frame.repeat(count)
-                scores = run_model_batches(
-                    depth_model,
-                    crops,
-                    diam,
-                    depth_info,
-                    args.depth_batch_size,
-                    args.amp,
-                    args.channels_last,
-                    acquisition.optics.pixel_pitch_um,
-                ).view(count, nrows)
+                scores = primary_scorer(crops, diam).view(count, nrows)
                 if has_fallback:
                     if depth_fallback_model is None:
                         raise RuntimeError("Depth fallback rows were selected while the fallback model is disabled")
@@ -805,16 +811,8 @@ def main() -> None:
                         count, nrows, args.crop_size, args.crop_size
                     )[:, frame_route_to_fallback].reshape(-1, args.crop_size, args.crop_size)
                     fallback_diam = diam_frame[frame_route_to_fallback].repeat(count)
-                    fallback_scores = run_model_batches(
-                        depth_fallback_model,
-                        fallback_crops,
-                        fallback_diam,
-                        depth_fallback_info,
-                        args.depth_batch_size,
-                        args.amp,
-                        args.channels_last,
-                        acquisition.optics.pixel_pitch_um,
-                    ).view(count, -1)
+                    assert fallback_scorer is not None
+                    fallback_scores = fallback_scorer(fallback_crops, fallback_diam).view(count, -1)
                     scores[:, frame_route_to_fallback] = fallback_scores
                 values, arg = scores.max(dim=0)
                 improve = values > frame_best_score
@@ -875,6 +873,9 @@ def main() -> None:
             if device.type == "cuda":
                 torch.cuda.synchronize(device)
             depth_times.append(time.perf_counter() - d0)
+            graph_stats.append(primary_scorer.stats())
+            if fallback_scorer is not None:
+                graph_stats.append(fallback_scorer.stats())
 
             frame_best_slice_np = frame_best_slice.cpu().numpy().astype(np.int32)
             frame_best_score_np = frame_best_score.cpu().numpy().astype(np.float32)
@@ -1182,6 +1183,11 @@ def main() -> None:
         "slice_diam_frame_batch": bool(args.slice_diam_frame_batch),
         "depth_buffer_reuse": bool(args.depth_buffer_reuse),
         "depth_inplace_propagation": bool(args.depth_inplace_propagation),
+        "depth_cuda_graphs": bool(args.depth_cuda_graphs),
+        "depth_cuda_graph_captures": sum(item["captures"] for item in graph_stats),
+        "depth_cuda_graph_replays": sum(item["replays"] for item in graph_stats),
+        "depth_cuda_graph_capture_sec": sum(item["capture_sec"] for item in graph_stats),
+        "depth_cuda_graph_fallbacks": sum(item["fallback_reason"] is not None for item in graph_stats),
         "diam_batch_size": int(args.diam_batch_size),
         "roi_crop_backend": "cuda" if roi_cropper is not None else "torch",
         "depth_model_backend": str(depth_info.get("model_backend", args.model_backend)),

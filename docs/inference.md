@@ -28,6 +28,14 @@ Depth and diameter state-dictionary checkpoints are loaded with PyTorch's restri
 
 Both presets use the same detector, thresholds, model weights, reconstruction grid from the acquisition file, and fallback semantics.
 
+### CUDA execution options
+
+Version 0.2.1 fuses central-region intensity, clipping, and minimum reduction during raw MinIP reconstruction. The CUDA implementation preserves the configured planes and complex64 propagation order. It requires the GPU extra (`cuda-python` and NVRTC); when unavailable, HoloD3 uses the original Torch implementation. A supplied MinIP image bypasses reconstruction and receives no speedup from this optimization. The first use on each device includes CUDA kernel compilation.
+
+The production preset enables `runtime.depth_cuda_graphs`. For each frame and depth model, HoloD3 captures repeated full slice-block scoring, checks the captured output against eager execution, and replays it with new crops. It retains at most one graph per model for that frame; different shapes, including partial final blocks, use eager scoring. Capture and equality-check time are included in the depth-stage timing. Capture failure or an output mismatch emits a warning and falls back to eager execution of the **same model and precision**, retaining the strict TensorRT backend policy.
+
+The portable Torch preset leaves graphs disabled because their setup cost can outweigh its smaller replay savings. Enable or disable them explicitly with `--depth-cuda-graphs` / `--no-depth-cuda-graphs` on `infer` and `demo`, or set the Boolean `runtime.depth_cuda_graphs` in a custom YAML. Graph buffers consume additional GPU memory. The fused-stage metrics report capture count, replay count, capture seconds, and fallback count; zero captures means the graph path did not run successfully.
+
 ```bash
 uv run holod3 config --preset portable-torch
 uv run holod3 config --preset production

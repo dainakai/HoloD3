@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -226,8 +228,63 @@ def minimum_intensity_projection(
     setup: PropagationSetup,
     *,
     slice_step: int = 1,
+    backend: str = "auto",
 ) -> torch.Tensor:
-    """Reconstruct selected planes and return their per-pixel minimum intensity."""
+    """Reconstruct the same planes with optional fused CUDA intensity reduction.
+
+    ``torch`` retains the reference implementation. ``auto`` uses the CUDA
+    kernel when available, otherwise Torch; ``cuda`` requires the kernel.
+    Differentiable calls retain the Torch path and its autograd behavior.
+    """
+
+    if backend not in {"auto", "torch", "cuda"}:
+        raise ValueError("MinIP backend must be auto, torch, or cuda")
+    eligible = wavefront.device.type == "cuda" and wavefront.dtype == torch.complex64
+    eligible = eligible and not (
+        torch.is_grad_enabled()
+        and any(tensor.requires_grad for tensor in (wavefront, setup.initial_transfer, setup.slice_transfer))
+    )
+    updater = _cuda_minip_updater(wavefront.device.index) if eligible and backend != "torch" else None
+    if updater is None:
+        if backend == "cuda":
+            raise RuntimeError("CUDA MinIP requires a complex64 CUDA wavefront, inference, and working cuda-python/NVRTC")
+        return _minimum_intensity_projection_torch(wavefront, setup, slice_step=slice_step)
+
+    step = max(1, int(slice_step))
+    if setup.slice_count < 1:
+        raise RuntimeError("No reconstruction slices were selected.")
+    offset = (setup.padding_side - setup.image_size) // 2
+    frequency = torch.fft.fft2(mean_pad_wavefront(wavefront, setup.padding_side)) * setup.initial_transfer
+    field = torch.empty_like(frequency)
+    projection = torch.ones((setup.image_size, setup.image_size), device=wavefront.device, dtype=torch.float32)
+    # Keep the reference's T**step arithmetic, including step=1, and recurrence.
+    step_transfer = setup.slice_transfer**step if setup.slice_count > step else None
+    for slice_index in range(0, setup.slice_count, step):
+        if slice_index:
+            frequency.mul_(step_transfer)
+        torch.fft.ifft2(frequency, out=field)
+        updater.update(field, projection, offset)
+    return projection
+
+
+@lru_cache(maxsize=8)
+def _cuda_minip_updater(device_index: int) -> Any:
+    try:
+        from src.common.cuda_minip_kernels import CudaMinIPUpdater
+
+        return CudaMinIPUpdater.build(device_index)
+    except (ImportError, OSError, RuntimeError) as exc:
+        warnings.warn(f"CUDA MinIP kernel unavailable; using Torch ({type(exc).__name__}).", RuntimeWarning, stacklevel=2)
+        return None
+
+
+def _minimum_intensity_projection_torch(
+    wavefront: torch.Tensor,
+    setup: PropagationSetup,
+    *,
+    slice_step: int = 1,
+) -> torch.Tensor:
+    """Original arithmetic and allocation order, retained as the portable oracle."""
 
     offset = (setup.padding_side - setup.image_size) // 2
     frequency = torch.fft.fft2(mean_pad_wavefront(wavefront, setup.padding_side)) * setup.initial_transfer

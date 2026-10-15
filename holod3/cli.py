@@ -12,6 +12,7 @@ from typing import Any
 
 import cv2
 
+from holod3 import __version__
 from holod3.acquisition import AcquisitionConfig
 from holod3.artifacts import fetch_model_artifacts, verify_production_artifacts
 from holod3.config import PipelineConfig, repository_root
@@ -53,6 +54,8 @@ def _config_with_cli_overrides(args: argparse.Namespace) -> PipelineConfig:
         runtime_changes["strict_backend"] = args.strict_backend
     elif any(runtime_changes.get(key) == "torch" for key in ("depth_model_backend", "diameter_model_backend")):
         runtime_changes["strict_backend"] = False
+    if getattr(args, "depth_cuda_graphs", None) is not None:
+        runtime_changes["depth_cuda_graphs"] = args.depth_cuda_graphs
     if runtime_changes:
         config = config.with_runtime(**runtime_changes)
     fallback_changes: dict[str, Any] = {}
@@ -343,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="holod3",
         description="Detect hologram particles and estimate their 3D depth and diameter.",
     )
-    parser.add_argument("--version", action="version", version="HoloD3 0.2.0")
+    parser.add_argument("--version", action="version", version=f"HoloD3 {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     verify = subparsers.add_parser("verify", help="Verify downloaded production model hashes.")
@@ -401,6 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
     infer.add_argument("--acquisition", required=True, help="Path to acquisition.yaml.")
     infer.add_argument("--run-dir", required=True)
     infer.add_argument("--preset", default="production", help="Preset name or inference YAML path.")
+    infer.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=None)
     infer.add_argument("--limit", type=int, default=1, help="Maximum frames; use 0 to process all frames.")
     infer.add_argument("--start-index", type=int, default=None)
     infer.add_argument("--end-index", type=int, default=None)
@@ -426,6 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo = subparsers.add_parser("demo", help="Run the included experimental acquisition and create CSV + 3D HTML.")
     demo.add_argument("--run-dir", default="runs/demo")
     demo.add_argument("--preset", default="portable-torch", help="Preset name or inference YAML path.")
+    demo.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=None)
     demo.add_argument("--limit", type=int, default=0, help="Maximum demo frames; 0 uses all included frames.")
     demo.add_argument("--device", default=None)
     demo.add_argument("--yolo-device", default=None)

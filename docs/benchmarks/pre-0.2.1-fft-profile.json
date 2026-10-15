@@ -1,0 +1,32 @@
+{
+  "recorded_date": "2026-10-14",
+  "source_commit": "3c79893e0e44223f27c710aa64c526f9c0fc9347",
+  "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+  "backend": "tensorrt",
+  "scope": "fixed 380 measured ROIs from demo 005302, all 1024 depth slices, same checkpoints and precision; excludes detector/MinIP/background and subprocess startup",
+  "method": "CUDA event intervals around ifft2, crop, and model batches; instrumented eager core; no kernel or L2/DRAM hardware counters",
+  "frame": "005302",
+  "rows": 380,
+  "depth_planes": 1024,
+  "diameter_planes": 303,
+  "results": [
+    {
+      "elapsed_sec": 0.9224229829851538,
+      "gpu_events_ms": {
+        "ifft2": 90.04777634888887,
+        "crop": 20.706208180636168,
+        "model_batches": 529.5238354206085
+      }
+    },
+    {
+      "elapsed_sec": 0.9253395949490368,
+      "gpu_events_ms": {
+        "ifft2": 90.50352032110095,
+        "crop": 20.772832168266177,
+        "model_batches": 530.6020431816578
+      }
+    }
+  ],
+  "unprofiled_eager_core_sec": 0.9073294718982652,
+  "status": "Historical diagnostic; reprofile version 0.2.1 before estimating incremental FFT fusion gains."
+}

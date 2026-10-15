@@ -45,5 +45,3 @@ These are stage measurements, not full CLI speedups. They exclude detector/ROI p
 The release does not retain winning depth crops for diameter inference: the original diameter pass advances propagation by gaps, and reusing the sequential depth crop changed diameter outputs in the earlier prototype. It also does not enable channels-last, lower reconstruction counts, reduced precision, or FFT callbacks. Such changes need independent output validation before they can replace the current path.
 
 The CUDA kernel and Graph paths remain optional. Custom models and CUDA environments must pass capture validation or continue eagerly. The new audit script supports `--backend torch` and another device index for checking a deployment before enabling graphs there.
-
-The [FFT fusion handoff](fft-fusion-design.md) records the next experiments, cache capacities, callback constraints, speedup estimates, and exact-output acceptance gates. Its proposed callback/FFT changes are not part of this release's implementation.

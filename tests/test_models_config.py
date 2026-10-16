@@ -181,3 +181,14 @@ def test_inference_config_rejects_malformed_values(
     malformed = replace(config, **{section: replace(getattr(config, section), **changes)})
     with pytest.raises(ValueError, match=message):
         malformed.validate()
+
+
+@pytest.mark.parametrize("name", ["reuse_depth_crops", "depth_input_reuse", "fuse_ifft_normalization"])
+def test_v022_runtime_options_are_explicit_and_backward_compatible(name: str) -> None:
+    assert getattr(PipelineConfig.preset("production").runtime, name)
+    assert not getattr(PipelineConfig.preset("portable-torch").runtime, name)
+    mapping = PipelineConfig.preset("production").to_dict()
+    del mapping["runtime"][name]
+    assert not getattr(PipelineConfig.from_mapping(mapping).runtime, name)
+    with pytest.raises(ValueError, match=name):
+        PipelineConfig.preset("production").with_runtime(**{name: "false"})

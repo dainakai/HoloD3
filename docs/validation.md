@@ -10,6 +10,9 @@ The test suite covers:
 - MinIP preparation and image-shape validation;
 - exact CUDA/Torch MinIP equality, including NaNs, subnormal values, odd padding offsets, slice strides, autograd fallback, and non-default device streams;
 - CUDA Graph input replay, shape bounds, capture/equality failure fallback, and packaged depth-model score equality;
+- TensorRT input/conditioning reuse across batches, partial blocks, frame resets, and CUDA Graph replay;
+- normalized complex64 IFFT equality, special values, stream/alias guards, preflight fallback, and exceptional cleanup;
+- winning-crop retention across routing, ties, invalid scores, non-unit depth steps, and recenter/per-depth-batch fallback;
 - semantic inference/model configuration;
 - pipeline command construction and model overrides;
 - optional fallback rules and physical coordinate scaling;
@@ -43,6 +46,53 @@ uv run python -m scripts.validate_cuda_optimizations \
 ```
 
 This requires a new output directory and runs all six demo frames at the full 1,024-plane depth grid. The first eager/graph pair copies every score to the CPU for an exact audit and is excluded from timing. Later pairs alternate execution order, include per-frame graph capture, and reuse the same loaded models and TensorRT engines. MinIP timing is separate and includes all configured MinIP planes; its first FFT/kernel setup is excluded. `results.json` records raw timing samples, exact-comparison counts, graph statistics, and peak Torch tensor memory. These core timings exclude engine compilation, detector/ROI preprocessing, and subprocess startup; they are not end-to-end CLI speedups.
+
+## Version 0.2.2 TensorRT validation
+
+The release audit compares the unmodified v0.2.1 core with v0.2.2 using the same loaded checkpoints and compiled TensorRT engines within each GPU campaign. It covers all six experimental frames, 2,273 particles, and all 1,024 depth planes. The variants disable all new options, enable input reuse plus IFFT normalization, enable only winning-crop reuse, or enable all three options.
+
+To reproduce from a Git checkout containing the v0.2.1 tag:
+
+```bash
+uv sync --frozen --extra gpu
+uv run holod3 infer \
+  --acquisition data/demo/experimental/acquisition.yaml \
+  --run-dir runs/reuse-inputs --preset production --limit 0 \
+  --stop-after-preprocessing
+uv run python -m scripts.validate_tensorrt_reuse \
+  --input runs/reuse-inputs/_work/depth_diam/tracks_with_diameter.csv \
+  --run-dir runs/reuse-validation --device 0 --repeats 5
+```
+
+Use new output directories and an idle GPU host. The audit refuses other compute workloads before and after each run; do not run GPU campaigns concurrently. It records source/checkpoint/input hashes and raw results in `results.json`. The first run of each variant audits every depth score and diameter crop; active normalized-IFFT variants additionally compare every reconstructed field with Torch. These instrumented runs are excluded from timing. Five measured repeats rotate/reverse variant order and check every CSV against that variant's audited output.
+
+Core elapsed time includes hologram I/O, phase retrieval, per-frame CUDA Graph capture, and per-run IFFT-plan preflight. It excludes model compilation, detector/ROI preprocessing, MinIP generation, and process startup. These are core-stage measurements, not complete CLI latency or model-accuracy measurements.
+
+Median elapsed seconds for six frames (five measured runs per variant; percentages are shorter elapsed time versus v0.2.1):
+
+| Variant | RTX 4080 SUPER | RTX 4060 Ti |
+| --- | ---: | ---: |
+| v0.2.1 reference | 4.5184 s | 13.5525 s |
+| TensorRT input reuse + normalized IFFT | 4.3471 s (3.79%) | 13.3143 s (1.76%) |
+| Winning-crop reuse only | 3.8613 s (14.54%) | 12.7346 s (6.04%) |
+| v0.2.2: both changes | 3.7091 s (17.91%) | 12.5502 s (7.40%) |
+
+The combined path ranged from 3.6880–3.7139 s on the RTX 4080 SUPER and 12.5296–12.5692 s on the RTX 4060 Ti. IFFT-plan setup/preflight after the audit warm-up took about 22–24 ms per combined run. Cold model/FFT compilation and short-run CLI latency must be assessed separately.
+
+On both GPUs, disabling the new options reproduced all three v0.2.1 CSVs exactly. Input reuse plus normalized IFFT also preserved every audited score, diameter crop, and CSV value. Each candidate retained the same 2,437,120 primary/fallback scores and selected depths. The combined path matched the crop-reuse-only output exactly, and all measured repetitions matched their own audited output. CUDA Graphs captured 12 times and replayed 1,536 times per run, with zero fallbacks.
+
+Winning-crop reuse caused the following final-diameter differences against v0.2.1:
+
+| GPU | Changed particles / total | Maximum absolute difference | RMSE |
+| --- | ---: | ---: | ---: |
+| RTX 4080 SUPER | 308 / 2,273 | 0.4500 µm | 0.02319 µm |
+| RTX 4060 Ti | 327 / 2,273 | 0.4500 µm | 0.02344 µm |
+
+The raw crop maximum differences were `3.04e-6` and `3.90e-6`, respectively. Of 9,310,208 pixels, 1,678 / 1,880 changed by one level after eight-bit quantization; no pixel changed by more than one level. All non-diameter CSV columns, including depth and fallback-source decisions, were unchanged. The normalized-IFFT path matched Torch on every reconstructed field (6,144 depth fields per GPU with crop reuse). Frequency propagation and the phase-retrieval feedback loop were unchanged; diameter crops are terminal consumers and cannot introduce new error into those recurrences. This audit does not establish a universal diameter tolerance for other inputs or models.
+
+The recorded environment used Torch `2.12.1+cu130`, Torch-TensorRT `2.12.1`, TensorRT `10.16.1.11`, nvmath-python `1.0.0`, CUDA Python `13.3.1`, and cuFFT `12.0.0.61`. Compiled engines were shared between variants within each GPU; equality across separately compiled engines or GPU models is not implied.
+
+Release checks passed: 153 tests with CUDA available; 117 passed and 36 GPU-only skips with CUDA disabled; Ruff; offline lock consistency; and wheel/source-distribution builds. The public `holod3 demo --preset production --limit 1` command also produced 380 particle rows, CSV/HTML/provenance outputs, and active TensorRT/reuse/normalized-IFFT paths, with two graph captures and no graph or FFT fallback.
 
 ## Experimental demo smoke result
 

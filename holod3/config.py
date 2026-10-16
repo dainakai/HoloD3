@@ -85,6 +85,9 @@ class RuntimeConfig:
     diameter_model_backend: str = "tensorrt"
     depth_batch_size: int = 256
     depth_cuda_graphs: bool = False
+    reuse_depth_crops: bool = False
+    depth_input_reuse: bool = False
+    fuse_ifft_normalization: bool = False
     diameter_batch_size: int = 512
     strict_backend: bool = True
     roi_image_prefetch_workers: int = 4
@@ -198,8 +201,9 @@ class PipelineConfig:
                 raise ValueError(f"{field} must be a non-negative integer")
         if self.runtime.depth_model_backend not in {"torch", "tensorrt"}:
             raise ValueError("runtime.depth_model_backend must be torch or tensorrt")
-        if not isinstance(self.runtime.depth_cuda_graphs, bool):
-            raise ValueError("runtime.depth_cuda_graphs must be a boolean")
+        for name in ("depth_cuda_graphs", "reuse_depth_crops", "depth_input_reuse", "fuse_ifft_normalization"):
+            if not isinstance(getattr(self.runtime, name), bool):
+                raise ValueError(f"runtime.{name} must be a boolean")
         if self.runtime.diameter_model_backend not in {"torch", "tensorrt"}:
             raise ValueError("runtime.diameter_model_backend must be torch or tensorrt")
         if not self.runtime.device.strip() or not self.runtime.yolo_device.strip():

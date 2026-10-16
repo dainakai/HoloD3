@@ -55,9 +55,12 @@ from src.detection.depth_runtime import (  # noqa: E402
     normalized_image_name,
     optimize_model_backend,
     run_model_batches,
+    FrameTensorRTScore,
+    retain_winning_crops,
     slice_values,
 )
 from src.common.cuda_graph import CudaGraphScorer  # noqa: E402
+from src.common.cuda_fft import ReconstructionIFFT  # noqa: E402
 from src.diam.inference import (  # noqa: E402
     optimize_slice_model_backend,
     predict_diameter_batch,
@@ -131,6 +134,9 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--depth-batch-size", type=int, default=256)
     p.add_argument("--depth-cuda-graphs", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--reuse-depth-crops", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--depth-input-reuse", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--fuse-ifft-normalization", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--diam-batch-size", type=int, default=512)
     p.add_argument("--diam-model-backend", choices=["tensorrt", "torch"], default="tensorrt")
     p.add_argument("--amp", action="store_true", help="Deprecated for TensorRT backend; kept for torch fallback.")
@@ -713,15 +719,23 @@ def main() -> None:
     graph_stats: list[dict[str, Any]] = []
 
     def make_scorer(model: Any, info: dict[str, Any]) -> CudaGraphScorer:
-        return CudaGraphScorer(
-            lambda crops, diam: run_model_batches(
-                model, crops, diam, info, args.depth_batch_size, args.amp,
-                args.channels_last, acquisition.optics.pixel_pitch_um,
-            ),
-            enabled=bool(args.depth_cuda_graphs and len(slices) >= 2 * args.slice_block),
-        )
+        if args.depth_input_reuse and info.get("model_backend") == "tensorrt":
+            score = FrameTensorRTScore(
+                model, info, args.depth_batch_size, acquisition.optics.pixel_pitch_um,
+                amp=args.amp, channels_last=args.channels_last,
+            )
+        else:
+            def score(crops, diam):
+                return run_model_batches(
+                    model, crops, diam, info, args.depth_batch_size, args.amp,
+                    args.channels_last, acquisition.optics.pixel_pitch_um,
+                )
+        return CudaGraphScorer(score, enabled=bool(args.depth_cuda_graphs and len(slices) >= 2 * args.slice_block))
 
-    with torch.inference_mode():
+    reuse_depth_crops = bool(args.reuse_depth_crops and args.slice_diam_frame_batch and not args.recenter_on_slice)
+    with torch.inference_mode(), ReconstructionIFFT(
+        padlen, device, enabled=args.fuse_ifft_normalization,
+    ) as reconstruction_ifft:
         for frame_i, (file_name, indices) in enumerate(groups, start=1):
             rows = df.loc[indices].reset_index(drop=True)
             frame_route_to_fallback = torch.from_numpy(router_to_fallback[indices]).to(device=device)
@@ -770,6 +784,7 @@ def main() -> None:
             current_slice = int(slices[0])
             frame_best_slice = torch.full((nrows,), int(slices[0]), device=device, dtype=torch.int32)
             frame_best_score = torch.full((nrows,), -torch.inf, device=device, dtype=torch.float32)
+            frame_best_crops = None
             step_cache: dict[int, torch.Tensor] = {}
             has_fallback = bool(frame_route_to_fallback.any().item())
 
@@ -791,7 +806,7 @@ def main() -> None:
                 depth_diam_buffer = diam_frame.repeat(args.slice_block)
 
             def score_depth_block() -> None:
-                nonlocal block_count, depth_crops_scored
+                nonlocal block_count, depth_crops_scored, frame_best_crops
                 count = block_count if reuse_depth_buffers else len(block_crops)
                 if count <= 0:
                     return
@@ -818,6 +833,10 @@ def main() -> None:
                 improve = values > frame_best_score
                 slice_tensor = torch.tensor(block_slices, device=device, dtype=torch.int32)
                 candidate_slices = slice_tensor[arg]
+                if reuse_depth_crops:
+                    frame_best_crops = retain_winning_crops(
+                        crops.view(count, nrows, args.crop_size, args.crop_size), arg, improve, frame_best_crops,
+                    )
                 frame_best_slice.copy_(torch.where(improve, candidate_slices, frame_best_slice))
                 frame_best_score.copy_(torch.where(improve, values, frame_best_score))
                 depth_crops_scored += int(crops.shape[0])
@@ -866,7 +885,7 @@ def main() -> None:
                     else:
                         freq = freq * step_transfer
                     current_slice = int(zi)
-                collect_depth_crop(ifft2(freq, args.fft_backend), int(zi))
+                collect_depth_crop(reconstruction_ifft(freq), int(zi))
 
             score_depth_block()
 
@@ -901,10 +920,22 @@ def main() -> None:
             frame_recenter_elapsed = 0.0
 
             s0 = time.perf_counter()
-            freq = base_freq.clone() if args.depth_inplace_propagation else base_freq
-            current_slice = 1
-            step_cache.clear()
-            for slice_int in sorted(np.unique(frame_best_slice_np).astype(np.int32).tolist()):
+            if frame_best_crops is not None:
+                # Match the original order: increasing selected depth, then row
+                # order within that depth. Diameter engine batches stay identical.
+                order = np.argsort(frame_best_slice_np, kind="stable")
+                frame_diam_crops = [frame_best_crops[torch.as_tensor(order, device=device)]]
+                frame_diam_indices = [indices[order]]
+                frame_diam_positions = [order]
+                slice_crops_scored += nrows
+                unique_frame_slices += len(np.unique(frame_best_slice_np))
+                diameter_slices = []
+            else:
+                freq = base_freq.clone() if args.depth_inplace_propagation else base_freq
+                current_slice = 1
+                step_cache.clear()
+                diameter_slices = sorted(np.unique(frame_best_slice_np).astype(np.int32).tolist())
+            for slice_int in diameter_slices:
                 gap = int(slice_int - current_slice)
                 if gap > 0:
                     step_transfer = step_cache.get(gap)
@@ -921,7 +952,7 @@ def main() -> None:
                 local_positions = np.flatnonzero(mask)
                 local_indices = indices[local_positions]
                 sub = df.loc[local_indices]
-                field = ifft2(freq, args.fft_backend)
+                field = reconstruction_ifft(freq)
                 if not field.is_contiguous():
                     field = field.contiguous()
                 if roi_cropper is not None:
@@ -1184,6 +1215,14 @@ def main() -> None:
         "depth_buffer_reuse": bool(args.depth_buffer_reuse),
         "depth_inplace_propagation": bool(args.depth_inplace_propagation),
         "depth_cuda_graphs": bool(args.depth_cuda_graphs),
+        "reuse_depth_crops_requested": bool(args.reuse_depth_crops),
+        "reuse_depth_crops": reuse_depth_crops,
+        "depth_input_reuse_requested": bool(args.depth_input_reuse),
+        "depth_input_reuse": bool(args.depth_input_reuse and depth_info.get("model_backend") == "tensorrt"),
+        "fuse_ifft_normalization_requested": bool(args.fuse_ifft_normalization),
+        "fuse_ifft_normalization": reconstruction_ifft.active,
+        "ifft_plan_setup_sec": reconstruction_ifft.setup_sec,
+        "ifft_normalization_fallback": reconstruction_ifft.fallback_reason,
         "depth_cuda_graph_captures": sum(item["captures"] for item in graph_stats),
         "depth_cuda_graph_replays": sum(item["replays"] for item in graph_stats),
         "depth_cuda_graph_capture_sec": sum(item["capture_sec"] for item in graph_stats),

@@ -40,6 +40,9 @@ runtime:
   diameter_model_backend: tensorrt
   depth_batch_size: 256
   depth_cuda_graphs: true
+  reuse_depth_crops: true
+  depth_input_reuse: true
+  fuse_ifft_normalization: true
   diameter_batch_size: 512
   strict_backend: true
   roi_image_prefetch_workers: 4

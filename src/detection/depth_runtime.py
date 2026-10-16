@@ -411,3 +411,66 @@ def slice_values(setup: TransferSetup, args: argparse.Namespace) -> list[int]:
     if values[-1] != hi:
         values.append(hi)
     return values
+
+
+class FrameTensorRTScore:
+    """Reuse fixed conditioning and image input storage for one frame/scorer.
+
+    Particle diameters, row order, model and optical pitch must stay fixed for
+    this object's lifetime. Create a new scorer for each frame and routing group.
+    Only full blocks with the initial signature use the cached inputs; partial
+    blocks or other layouts use the original batch preparation. Each inference
+    batch is updated immediately before the TensorRT engine consumes it.
+    """
+
+    def __init__(self, model, info, batch_size, pixel_pitch_um, *, amp=False, channels_last=False):
+        if info.get("model_backend") != "tensorrt":
+            raise ValueError("Frame input reuse requires the TensorRT backend")
+        self.model, self.info = model, dict(info)
+        self.batch_size, self.pixel_pitch_um = batch_size, pixel_pitch_um
+        self.amp, self.channels_last = amp, channels_last
+        self.inputs = self.conditions = None
+        self.signature = None
+
+    def __call__(self, crops, diameters):
+        signature = (crops.device, crops.dtype, tuple(crops.shape), tuple(crops.stride()),
+                     diameters.device, diameters.dtype, tuple(diameters.shape))
+        if (torch.is_grad_enabled() or crops.dtype != torch.float32 or crops.numel() == 0
+                or (self.signature is not None and signature != self.signature)):
+            return run_model_batches(self.model, crops, diameters, self.info, self.batch_size,
+                                     self.amp, self.channels_last, self.pixel_pitch_um)
+        if self.inputs is None:
+            self.signature = signature
+            mode = str(self.info["input_mode"])
+            self.inputs = add_condition_channels(
+                torch.zeros_like(crops[:, None]), diameters, mode,
+                float(self.info["mask_radius_diam_scale"]), float(self.info["mask_min_radius_px"]),
+                float(self.info["mask_softness_px"]), self.pixel_pitch_um,
+            ).contiguous()
+            self.conditions = make_condition_tensor(diameters, mode)
+        # Fresh scores keep the CUDA Graph eager/capture equality gate independent.
+        scores = torch.empty(crops.shape[0], device=crops.device, dtype=torch.float32)
+        for start in range(0, crops.shape[0], self.batch_size):
+            end = min(start + self.batch_size, crops.shape[0])
+            torch.sub(crops[start:end], 0.5, out=self.inputs[start:end, 0])
+            self.inputs[start:end, 0].div_(0.25)
+            if int(self.info.get("trt_num_inputs", 2)) == 1:
+                values = self.model(self.inputs[start:end])
+            else:
+                values = self.model(self.inputs[start:end], self.conditions[start:end])
+            scores[start:end] = values.detach().float()
+        return scores
+
+
+def retain_winning_crops(crops, arg, improve, previous=None):
+    """Keep each particle's winning crop with the depth search's existing tie rule.
+
+    crops is (planes, particles, height, width). Initialize from the first plane
+    to match the default selected slice even when every score is -inf or NaN.
+    Copy the selected values: the input block is overwritten on the next depth.
+    """
+    if previous is None:
+        previous = crops[0].clone()
+    candidates = crops[arg, torch.arange(crops.shape[1], device=crops.device)]
+    previous.copy_(torch.where(improve[:, None, None], candidates, previous))
+    return previous
